@@ -1,0 +1,30 @@
+{
+  "template_source": "format_template.docx",
+  "output_file": "report.docx",
+  "placeholders_replaced": 0,
+  "paragraphs_added": 35,
+  "tables_added": 0,
+  "validation_passed": true,
+  "issues_found": 0,
+  "document_structure": {
+    "sections": [
+      "GIỚI THIỆU (H1)",
+      "CHƯƠNG 2. ỨNG DỤNG VÀ ĐỊNH HƯỚNG PHÁT TRIỂN AI (H1)",
+      "Tối ưu hóa hiệu năng và trí tuệ nhân tạo trên thiết bị biên (H2)",
+      "Retrieval-Augmented Generation, quản lý tri thức và trách nhiệm AI (H2)",
+      "KẾT LUẬN (H1)",
+      "TÀI LIỆU THAM KHẢO (H1)"
+    ]
+  },
+  "format_applied": {
+    "font": "Times New Roman",
+    "fontSize": "14pt",
+    "heading1Format": "14pt bold center",
+    "heading2Format": "14pt bold both-align",
+    "bodyFormat": "14pt justify with first-line indent 28.35pt",
+    "lineSpacing": "1.5x",
+    "pageSetup": "A4, margins: top 2.49cm, bottom 2.01cm, left 3.5cm, right 1.5cm"
+  },
+  "source_content": "chuong_2.md",
+  "generated_date": "2026-05-27"
+}
