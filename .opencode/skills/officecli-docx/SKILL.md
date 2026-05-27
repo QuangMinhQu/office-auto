@@ -14,6 +14,15 @@ If `officecli` is missing:
 
 Verify with `officecli --version` (open a new terminal if PATH hasn't picked up). If install fails, download a binary from https://github.com/iOfficeAI/OfficeCLI/releases.
 
+**Windows PATH bootstrap for the current terminal.** The install script may place `officecli.exe` in `%LOCALAPPDATA%\OfficeCLI`, but the current PowerShell session may not pick that PATH change up immediately. Before assuming the install failed, run:
+
+```powershell
+$env:PATH = "$env:LOCALAPPDATA\OfficeCLI;$env:PATH"
+officecli --version
+```
+
+If `officecli --version` works after that, continue using the same terminal session for all subsequent `officecli` commands.
+
 ## ⚠️ Help-First Rule
 
 **This skill teaches what good docx looks like, not every command flag. When a property name, enum value, or alias is uncertain, consult help BEFORE guessing.**
@@ -40,6 +49,8 @@ Help is pinned to the installed CLI version. When this skill and help disagree, 
 - NEVER hand-write `\$`, `\t`, `\n` inside executable examples. The CLI does not interpret backslash escapes; they will land in your file as literal characters. In a cell / paragraph text, a real newline goes through the JSON layer (`batch` heredoc with `"\n"` inside the JSON string).
 
 **Incremental execution.** Run commands one at a time and read each exit code. `officecli` mutates the file on every call; a 50-command script that fails at command 3 will cascade silently. One command → check output → continue. After any structural op (new style, table, TOC, section break) run `get` on it before stacking more on top.
+
+**Windows PowerShell resident-mode caveat.** On Windows, `officecli open "$FILE"` keeps a resident session attached to that terminal. That is expected. Do not treat the terminal as hung, and do not open the same file in Word/WPS while the resident session is still active. Keep all subsequent `officecli add/set/get/query` commands in the same terminal, then finish with `officecli close "$FILE"` before validation or manual viewing.
 
 **File-name convention in this skill.** All commands use `"$FILE"` — set once at the top of your script or session (`FILE="your-doc.docx"`) and every command picks it up. Copy-paste blocks and individual examples both assume `$FILE` is set. Do NOT copy a literal `doc.docx` / `review.docx` into an output directory — that is the wrong filename, always substitute your actual target.
 
@@ -215,6 +226,26 @@ officecli add "$FILE" /body --type paragraph --prop text="Section one" --prop nu
 
 After adding, verify with `officecli query "$FILE" 'paragraph[numId>0]'` that every `numId` reference points at a real `<w:num>`. See `officecli help docx abstractnum` and `officecli help docx num` for all level and format options.
 
+**Outline numbering for numbered headings (1 / 1.1 / 1.1.1).** Heading styles and numbering are separate. `style=Heading2` by itself does NOT recreate `1.1`; the paragraph also needs the correct `numId` and `ilvl`. When you are cloning a template that uses numbered headings:
+
+```bash
+# 1. Inspect the template numbering before you rebuild anything
+officecli get "$TEMPLATE" /numbering --depth 3 --json
+officecli query "$TEMPLATE" 'paragraph[numId>0]'
+
+# 2. Recreate the numbering definition in the output file
+officecli add "$FILE" /numbering --type abstractnum --prop format=decimal --prop levels=3
+officecli add "$FILE" /numbering --type num --prop abstractNumId=1
+
+# 3. Apply heading style AND numbering binding on each heading paragraph
+officecli add "$FILE" /body --type paragraph --prop text="Overview" --prop style=Heading1 --prop numId=1 --prop ilvl=0
+officecli add "$FILE" /body --type paragraph --prop text="Background" --prop style=Heading2 --prop numId=1 --prop ilvl=1
+officecli add "$FILE" /body --type paragraph --prop text="Signal Model" --prop style=Heading3 --prop numId=1 --prop ilvl=2
+```
+
+If the source document already has built-in or custom numbering, inspect `/numbering` first and reuse the real `abstractNumId` / `numId` mapping instead of assuming `1`. Verify the final result with both `officecli view "$FILE" outline` and `officecli query "$FILE" 'paragraph[numId>0]'`.
+
+
 ### Tab stops (dot leaders, right-aligned page numbers)
 
 Used for positional layout — a signature line, a TOC-entry-style "Chapter 1 ........ 12" row, a form field slot. Tab stops are a first-class `tab` element added as a child of the paragraph:
@@ -296,6 +327,7 @@ officecli get "$FILE" "/tableofcontents" --depth 2   # alias, same target
 - **Recipients who cannot / will not recalculate**: use the **static TOC fallback — see Report-level recipes (f) below**. No CLI-only pipeline currently populates `<w:sdtContent>` with the cached heading rows that Word writes on save. Headless conversion tools cannot pre-render the TOC on Word's behalf — their TOC handling and pagination differ, so relying on them to "fill" the TOC for a Word recipient is unsafe. `raw-set` on `//w:sdt/w:sdtContent` is theoretically possible but requires reconstructing the exact per-heading XML (with correct bookmarks, PAGEREF chains, and cached page numbers) and has not worked reliably. Hand-write the static fallback instead.
 
 Ship-check: `officecli query "$FILE" 'p:contains("Update field to see")'` must return empty whenever the reader won't recalculate. If it matches, the TOC is unpopulated — switch to recipe (f).
+
 
 ### Images
 
@@ -499,6 +531,7 @@ Your first document is almost never correct. Treat QA as a bug hunt, not a confi
    officecli query "$FILE" 'p:contains("{{")'
    officecli query "$FILE" 'p:empty'
    officecli query "$FILE" 'image:no-alt'
+  officecli query "$FILE" 'paragraph[numId>0]'
    ```
 5. `officecli validate "$FILE"` — schema check. Close any resident first (see Known Issues).
 6. **Visual pass — walk every page via the HTML preview.** Run `officecli view "$FILE" html` and Read the returned HTML path. Walk every page. "validate pass" is not delivery; "the preview looks like a real document" is delivery. For human review, run `officecli watch "$FILE"` (user opens the live preview at their own discretion) or have them open the `.docx` directly in Word / WPS.
@@ -535,6 +568,7 @@ TOC, PAGE, NUMPAGES, MERGEFIELD are all fields with **cached values** that may b
 
 - [ ] Footer PAGE field: `get /footer[N] --depth 3` lists the runs that carry the `fldChar begin` / `instrText` / `fldChar separate` / cached value / `fldChar end` chain — expect ≥ 5 runs for a single PAGE, ≥ 11 for composite "Page X of Y". For the underlying `<w:fldChar>` XML, use `officecli raw "$FILE" "/footer[1]" | grep -o fldChar | wc -l` (NOT `grep -c` — single-line XML returns 1, false-PASS risk), or run `officecli query "$FILE" 'field[fieldType=page]'` for a semantic match. If you see a single run with text `"Page"`, the field is missing — re-add with `--prop field=page`.
 - [ ] TOC: `get /body/toc[1] --depth 2` must show field structure. In some viewers the TOC shows `1 1 1 1` for page numbers or the literal `Update field to see table of contents` until recalculated (see TOC delivery step).
+- [ ] Numbered headings: `query 'paragraph[numId>0]'` returns the expected heading paragraphs, and each numbered heading has the intended `ilvl` (`0` for H1, `1` for H2, `2` for H3 unless the template defines otherwise). If outline shows headings but numbering is missing, the style was copied without the numbering binding.
 - [ ] MERGEFIELD: `query 'field[fieldType=mergefield]'` — one entry per template slot. No literal `{{name}}` text elsewhere.
 - [ ] SEQ / PAGEREF (if your document uses them via raw-set): confirm each `<w:fldChar>` chain exists by `raw`-inspecting the `document.xml`.
 
