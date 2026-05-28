@@ -1,0 +1,51 @@
+{
+  "mode_requested": "preserve-template-scaffold",
+  "mode": "preserve-template-scaffold",
+  "source_file": "/home/minhquang/office-auto/slide_content.md",
+  "template_file": "/home/minhquang/office-auto/format_template.pptx",
+  "target_file": "/home/minhquang/office-auto/report.pptx",
+  "preserve": [
+    "headers-footers-and-slide-numbers",
+    "layout-placeholder-regions-and-content-slots",
+    "placeholder-bindings",
+    "presentation-structure",
+    "slide-masters-and-layouts",
+    "slide-size-and-background",
+    "theme-colors-fonts",
+    "title-slide"
+  ],
+  "replace_ranges": [
+    {
+      "name": "after-title-slide-to-before-closing-slide",
+      "strategy": "after-title-slide-to-end-of-main-story",
+      "status": "resolved",
+      "slide_start_index": 2,
+      "slide_end_index": 9,
+      "remove_paths": [
+        "/slide[2]",
+        "/slide[3]",
+        "/slide[4]",
+        "/slide[5]",
+        "/slide[6]",
+        "/slide[7]",
+        "/slide[8]",
+        "/slide[9]"
+      ],
+      "insert_before_path": "/slide[10]",
+      "prototype_slide_path": "/slide[2]",
+      "prototype_layout": "OBJECT",
+      "prototype_layout_type": "obj",
+      "preserves_title_slide": true,
+      "preserves_closing_slide": true
+    }
+  ],
+  "artifacts": {
+    "content_ast": ".office-auto/state/manual-run-pptx-test/content_ast.json",
+    "content_outline": ".office-auto/state/manual-run-pptx-test/content_outline.json",
+    "template_profile": ".office-auto/state/manual-run-pptx-test/template_profile.json",
+    "plan": ".office-auto/state/manual-run-pptx-test/plan.json",
+    "build_report": ".office-auto/state/manual-run-pptx-test/build_report.json",
+    "qa_report": ".office-auto/state/manual-run-pptx-test/qa_report.json"
+  },
+  "status": "ready"
+}

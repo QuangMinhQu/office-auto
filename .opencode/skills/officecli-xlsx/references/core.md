@@ -1,4 +1,4 @@
-# OfficeCLI XLSX: Core Ops
+# OfficeCLI XLSX: Core Quick Ops
 
 ```bash
 officecli get "$FILE" / --depth 2
@@ -10,7 +10,16 @@ officecli add "$FILE" / --type sheet --prop name='Report'
 officecli import "$FILE" /Sheet1 data.csv
 ```
 
-## Gợi ý
-- Dùng `get` để lấy cây workbook theo depth nhỏ trước khi mutate.
-- Không sửa trực tiếp XML sheet khi `sheet`, `row`, `cell`, `table` đã đủ.
-- Với chart/pivot/named range phức tạp, kiểm tra `help xlsx` trước khi dùng L3.
+## Dung file nay khi nao
+- Can mot cheat sheet rat ngan de orient nhanh truoc khi mo file tham chieu chi tiet.
+- Khong dung file nay thay cho `SKILL.md` hoac cac reference chuyen sau.
+
+## Mo tiep file nao
+- `view-query.md`: orient workbook, named range, sparse cells.
+- `elements.md`: sheet, row, column, cell, table, chart, pivot.
+- `formulas-functions.md`: formula, array formula, defined names, formula errors.
+- `styles-formatting.md`: font, fill, border, alignment, number format, conditional formatting.
+- `data-operations.md`: import/export, validation, sort, filter, replace.
+- `advanced-features.md`: protection, comments, hyperlinks, page setup.
+- `batch-resident.md`: multi-step mutation discipline.
+- `raw-l3.md`: XML fallback co guardrail.

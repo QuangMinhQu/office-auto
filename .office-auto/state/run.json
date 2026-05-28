@@ -1,0 +1,23 @@
+{
+  "run_id": "run-001",
+  "mode": "preserve-template-scaffold",
+  "source_file": "chuong_2.md",
+  "template_file": "formate_template.docx",
+  "output_file": "report.docx",
+  "created_at": "2026-05-28",
+  "completed_at": "2026-05-28",
+  "status": "ready",
+  "phases": {
+    "0": "preflight - completed",
+    "1": "analyze - completed",
+    "2": "plan - completed",
+    "3": "execute - completed",
+    "4": "qa - completed",
+    "5": "finalize - completed"
+  },
+  "artifacts": {
+    "plan": ".office-auto/state/run-001/plan.json",
+    "build_report": ".office-auto/state/run-001/build_report.json",
+    "qa_report": ".office-auto/state/run-001/qa_report.json"
+  }
+}

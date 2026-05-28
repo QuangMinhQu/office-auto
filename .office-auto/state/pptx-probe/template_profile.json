@@ -1,0 +1,534 @@
+{
+  "template_file": "format_template.pptx",
+  "officecli_version": "1.0.100",
+  "outline_snapshot": {
+    "fileName": "format_template.pptx",
+    "totalSlides": 10,
+    "slides": [
+      {
+        "index": 1,
+        "title": "Tự động hóa soạn thảo văn bản theo hình thức mẫu qua thiết kế Skills và tích hợp OfficeCLI\n",
+        "textBoxes": 2,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 2,
+        "title": null,
+        "textBoxes": 5,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 3,
+        "title": null,
+        "textBoxes": 4,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 4,
+        "title": null,
+        "textBoxes": 5,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 5,
+        "title": null,
+        "textBoxes": 5,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 6,
+        "title": null,
+        "textBoxes": 4,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 7,
+        "title": null,
+        "textBoxes": 5,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 8,
+        "title": null,
+        "textBoxes": 4,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 9,
+        "title": null,
+        "textBoxes": 4,
+        "pictures": 0,
+        "oleObjects": 0
+      },
+      {
+        "index": 10,
+        "title": null,
+        "textBoxes": 4,
+        "pictures": 0,
+        "oleObjects": 0
+      }
+    ]
+  },
+  "stats_snapshot": {
+    "slides": 10,
+    "totalShapes": 53,
+    "textBoxes": 52,
+    "pictures": 0,
+    "charts": 0,
+    "oleObjects": 0,
+    "words": 232,
+    "slidesWithoutTitle": 9,
+    "picturesWithoutAlt": 0,
+    "fontUsage": {
+      "Times New Roman": 55
+    }
+  },
+  "presentation_profile": {
+    "slide_width": "33.87cm",
+    "slide_height": "19.05cm",
+    "default_font": "Arial",
+    "theme": {
+      "theme.name": "office theme",
+      "theme.colorScheme": "Office",
+      "theme.color.dk1": "#000000",
+      "theme.color.lt1": "#FFFFFF",
+      "theme.color.dk2": "#0E2841",
+      "theme.color.lt2": "#E8E8E8",
+      "theme.color.accent1": "#156082",
+      "theme.color.accent2": "#E97132",
+      "theme.color.accent3": "#196B24",
+      "theme.color.accent4": "#0F9ED5",
+      "theme.color.accent5": "#A02B93",
+      "theme.color.accent6": "#4EA72E",
+      "theme.color.hlink": "#467886",
+      "theme.color.folHlink": "#96607D",
+      "theme.fontScheme": "Office",
+      "theme.font.major.latin": "Arial",
+      "theme.font.major.eastAsia": "",
+      "theme.font.minor.latin": "Arial",
+      "theme.font.minor.eastAsia": "",
+      "theme.formatScheme": "Office"
+    },
+    "total_slides": 10,
+    "master_count": 1,
+    "layout_count": 12,
+    "notes_count": 0
+  },
+  "preserve_defaults": [
+    "headers-footers-and-slide-numbers",
+    "layout-placeholder-regions-and-content-slots",
+    "placeholder-bindings",
+    "presentation-structure",
+    "slide-masters-and-layouts",
+    "slide-size-and-background",
+    "theme-colors-fonts",
+    "title-slide"
+  ],
+  "title_slide": {
+    "index": 1,
+    "profile": {
+      "index": 1,
+      "path": "/slide[1]",
+      "layout": "TITLE",
+      "layoutType": "title",
+      "title": null,
+      "texts": [
+        "Tự động hóa soạn thảo văn bản theo hình thức mẫu qua thiết kế Skills và tích hợp OfficeCLI",
+        "Từ 26/5 - 31/5\nNgười trình bày: Nguyễn Quang Minh",
+        "Báo cáo hàng tuần"
+      ],
+      "placeholder_keys": [
+        "1",
+        "2",
+        "dt",
+        "ftr",
+        "sldNum"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[1]/placeholder[1]",
+        "2": "/slide[1]/placeholder[2]",
+        "dt": "/slide[1]/placeholder[dt]",
+        "ftr": "/slide[1]/placeholder[ftr]",
+        "sldNum": "/slide[1]/placeholder[sldNum]"
+      }
+    },
+    "placeholder_paths": {
+      "1": "/slide[1]/placeholder[1]",
+      "2": "/slide[1]/placeholder[2]",
+      "dt": "/slide[1]/placeholder[dt]",
+      "ftr": "/slide[1]/placeholder[ftr]",
+      "sldNum": "/slide[1]/placeholder[sldNum]"
+    }
+  },
+  "closing_slide": {
+    "index": 10,
+    "profile": {
+      "index": 10,
+      "path": "/slide[10]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Intro to AI",
+        "Thank you!"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[10]/placeholder[1]",
+        "title": "/slide[10]/placeholder[title]",
+        "body": "/slide[10]/placeholder[body]",
+        "dt": "/slide[10]/placeholder[dt]",
+        "ftr": "/slide[10]/placeholder[ftr]"
+      }
+    }
+  },
+  "content_prototype": {
+    "index": 2,
+    "path": "/slide[2]",
+    "layout": "OBJECT",
+    "layout_type": "obj",
+    "placeholder_paths": {
+      "1": "/slide[2]/placeholder[1]",
+      "title": "/slide[2]/placeholder[title]",
+      "body": "/slide[2]/placeholder[body]",
+      "dt": "/slide[2]/placeholder[dt]",
+      "ftr": "/slide[2]/placeholder[ftr]"
+    },
+    "required_placeholder_types": [
+      "1",
+      "body",
+      "dt",
+      "ftr",
+      "title"
+    ]
+  },
+  "slides": [
+    {
+      "index": 1,
+      "path": "/slide[1]",
+      "layout": "TITLE",
+      "layoutType": "title",
+      "title": null,
+      "texts": [
+        "Tự động hóa soạn thảo văn bản theo hình thức mẫu qua thiết kế Skills và tích hợp OfficeCLI",
+        "Từ 26/5 - 31/5\nNgười trình bày: Nguyễn Quang Minh",
+        "Báo cáo hàng tuần"
+      ],
+      "placeholder_keys": [
+        "1",
+        "2",
+        "dt",
+        "ftr",
+        "sldNum"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[1]/placeholder[1]",
+        "2": "/slide[1]/placeholder[2]",
+        "dt": "/slide[1]/placeholder[dt]",
+        "ftr": "/slide[1]/placeholder[ftr]",
+        "sldNum": "/slide[1]/placeholder[sldNum]"
+      }
+    },
+    {
+      "index": 2,
+      "path": "/slide[2]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Nội dung",
+        "Giới thiệu\nBackground\nPrevious Research\nVấn đề liên quan\nPhương pháp thực hiện\nThí nghiệm và đánh giá kết quả"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[2]/placeholder[1]",
+        "title": "/slide[2]/placeholder[title]",
+        "body": "/slide[2]/placeholder[body]",
+        "dt": "/slide[2]/placeholder[dt]",
+        "ftr": "/slide[2]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 3,
+      "path": "/slide[3]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Giới thiệu"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[3]/placeholder[1]",
+        "title": "/slide[3]/placeholder[title]",
+        "body": "/slide[3]/placeholder[body]",
+        "dt": "/slide[3]/placeholder[dt]",
+        "ftr": "/slide[3]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 4,
+      "path": "/slide[4]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Background",
+        "Parallel magnetic resonance imaging (pMRI) including:\nGRAPPA - Generalized Autocalibrating partial parallel acquisition\nSENSE - Sensitivity encoding\nQuality of MRI images depends heavily on choice of reconstruction parameters like:\nInterpolation Kernel size in GRAPPA\nCoil sensitivity map estimation in SENSE"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[4]/placeholder[1]",
+        "title": "/slide[4]/placeholder[title]",
+        "body": "/slide[4]/placeholder[body]",
+        "dt": "/slide[4]/placeholder[dt]",
+        "ftr": "/slide[4]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 5,
+      "path": "/slide[5]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Previous Research",
+        "Collect optimal pararmeter (block size, column size, reduction factor, autocalibration signals) manually for optimizing GRAPPA reconstruction. \nHowever, no AI agent equipped with the knowledge of parameter tuning to guide parallel MRI reconstruction\nRecently, LLM embodying vast knowledge bases are adept at\nComplex tasks → Structured and Planned steps"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[5]/placeholder[1]",
+        "title": "/slide[5]/placeholder[title]",
+        "body": "/slide[5]/placeholder[body]",
+        "dt": "/slide[5]/placeholder[dt]",
+        "ftr": "/slide[5]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 6,
+      "path": "/slide[6]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Vấn đề liên quan"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[6]/placeholder[1]",
+        "title": "/slide[6]/placeholder[title]",
+        "body": "/slide[6]/placeholder[body]",
+        "dt": "/slide[6]/placeholder[dt]",
+        "ftr": "/slide[6]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 7,
+      "path": "/slide[7]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Motivation",
+        "Use LLM+P (Planning) technique to explore the task of MRI reconstruction\nInvolves employing an LLM-based agent for vast knowledge from LLM and the Planning Domain Definition Language (PDDL)"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[7]/placeholder[1]",
+        "title": "/slide[7]/placeholder[title]",
+        "body": "/slide[7]/placeholder[body]",
+        "dt": "/slide[7]/placeholder[dt]",
+        "ftr": "/slide[7]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 8,
+      "path": "/slide[8]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Phương pháp thực hiện"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[8]/placeholder[1]",
+        "title": "/slide[8]/placeholder[title]",
+        "body": "/slide[8]/placeholder[body]",
+        "dt": "/slide[8]/placeholder[dt]",
+        "ftr": "/slide[8]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 9,
+      "path": "/slide[9]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Time-series",
+        "Thí nghiệm và đánh giá kết quả"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[9]/placeholder[1]",
+        "title": "/slide[9]/placeholder[title]",
+        "body": "/slide[9]/placeholder[body]",
+        "dt": "/slide[9]/placeholder[dt]",
+        "ftr": "/slide[9]/placeholder[ftr]"
+      }
+    },
+    {
+      "index": 10,
+      "path": "/slide[10]",
+      "layout": "OBJECT",
+      "layoutType": "obj",
+      "title": null,
+      "texts": [
+        "Trong-Nghia Nguyen",
+        "‹#›",
+        "Intro to AI",
+        "Thank you!"
+      ],
+      "placeholder_keys": [
+        "1",
+        "body",
+        "dt",
+        "ftr",
+        "title"
+      ],
+      "placeholder_paths": {
+        "1": "/slide[10]/placeholder[1]",
+        "title": "/slide[10]/placeholder[title]",
+        "body": "/slide[10]/placeholder[body]",
+        "dt": "/slide[10]/placeholder[dt]",
+        "ftr": "/slide[10]/placeholder[ftr]"
+      }
+    }
+  ],
+  "replace_range_candidates": [
+    {
+      "name": "after-title-slide-to-before-closing-slide",
+      "strategy": "after-title-slide-to-end-of-main-story",
+      "status": "resolved",
+      "slide_start_index": 2,
+      "slide_end_index": 9,
+      "remove_paths": [
+        "/slide[2]",
+        "/slide[3]",
+        "/slide[4]",
+        "/slide[5]",
+        "/slide[6]",
+        "/slide[7]",
+        "/slide[8]",
+        "/slide[9]"
+      ],
+      "insert_before_path": "/slide[10]",
+      "prototype_slide_path": "/slide[2]",
+      "prototype_layout": "OBJECT",
+      "prototype_layout_type": "obj",
+      "preserves_title_slide": true,
+      "preserves_closing_slide": true
+    }
+  ],
+  "residue_markers": [
+    "BACKGROUND",
+    "COLLECT OPTIMAL PARARMETER (BLOCK SIZE, COLUMN SIZE, REDUCTION FACTOR, AUTOCALIBRATION SIGNALS) MANUALLY FOR OPTIMIZING GRAPPA RECONSTRUCTION. HOWEVER, NO AI AGENT EQUIPPED WITH THE KNOWLEDGE OF PARAMETER TUNING TO GUIDE PARALLEL MRI RECONSTRUCTION RECENTLY, LLM EMBODYING VAST KNOWLEDGE BASES ARE ADEPT AT COMPLEX TASKS → STRUCTURED AND PLANNED STEPS",
+    "GIOI THIEU",
+    "GIOI THIEU BACKGROUND PREVIOUS RESEARCH VAN ĐE LIEN QUAN PHUONG PHAP THUC HIEN THI NGHIEM VA ĐANH GIA KET QUA",
+    "MOTIVATION",
+    "PARALLEL MAGNETIC RESONANCE IMAGING (PMRI) INCLUDING: GRAPPA - GENERALIZED AUTOCALIBRATING PARTIAL PARALLEL ACQUISITION SENSE - SENSITIVITY ENCODING QUALITY OF MRI IMAGES DEPENDS HEAVILY ON CHOICE OF RECONSTRUCTION PARAMETERS LIKE: INTERPOLATION KERNEL SIZE IN GRAPPA COIL SENSITIVITY MAP ESTIMATION IN SENSE",
+    "PHUONG PHAP THUC HIEN",
+    "PREVIOUS RESEARCH",
+    "THI NGHIEM VA ĐANH GIA KET QUA",
+    "USE LLM+P (PLANNING) TECHNIQUE TO EXPLORE THE TASK OF MRI RECONSTRUCTION INVOLVES EMPLOYING AN LLM-BASED AGENT FOR VAST KNOWLEDGE FROM LLM AND THE PLANNING DOMAIN DEFINITION LANGUAGE (PDDL)",
+    "VAN ĐE LIEN QUAN"
+  ]
+}

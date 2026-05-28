@@ -1,0 +1,80 @@
+{
+  "status": "completed",
+  "mode": "preserve-template-scaffold",
+  "target_file": "/home/minhquang/office-auto/report.pptx",
+  "officecli_version": "1.0.100",
+  "replace_range": {
+    "name": "after-title-slide-to-before-closing-slide",
+    "strategy": "after-title-slide-to-end-of-main-story",
+    "status": "resolved",
+    "slide_start_index": 2,
+    "slide_end_index": 9,
+    "remove_paths": [
+      "/slide[2]",
+      "/slide[3]",
+      "/slide[4]",
+      "/slide[5]",
+      "/slide[6]",
+      "/slide[7]",
+      "/slide[8]",
+      "/slide[9]"
+    ],
+    "insert_before_path": "/slide[10]",
+    "prototype_slide_path": "/slide[2]",
+    "prototype_layout": "OBJECT",
+    "prototype_layout_type": "obj",
+    "preserves_title_slide": true,
+    "preserves_closing_slide": true
+  },
+  "preserve": [
+    "headers-footers-and-slide-numbers",
+    "layout-placeholder-regions-and-content-slots",
+    "placeholder-bindings",
+    "presentation-structure",
+    "slide-masters-and-layouts",
+    "slide-size-and-background",
+    "theme-colors-fonts",
+    "title-slide"
+  ],
+  "layout_mapping": {
+    "title_slide": "TITLE",
+    "content_layout": "OBJECT",
+    "prototype_placeholders": [
+      "body",
+      "date",
+      "footer",
+      "slidenum",
+      "title"
+    ]
+  },
+  "template_master_count": 1,
+  "template_layout_count": 12,
+  "cloned_slide_count": 19,
+  "removed_slide_count": 8,
+  "generated_slide_titles": [
+    "Nội dung",
+    "Bài toán cụ thể",
+    "Thách thức cốt lõi",
+    "Agent Skills trong hệ thống LLM-based Agent",
+    "Agent Skills trong hệ thống LLM-based Agent (tiếp 1)",
+    "Agent Skills trong hệ thống LLM-based Agent (tiếp 2)",
+    "Agent Skills trong hệ thống LLM-based Agent (tiếp 3)",
+    "OfficeCLI — Execution Engine cho Tài liệu Office",
+    "OfficeCLI — Execution Engine cho Tài liệu Office (tiếp 1)",
+    "Thiết kế và triển khai pipeline `md-to-docx-pipeline`",
+    "Thiết kế và triển khai pipeline `md-to-docx-pipeline` (tiếp 1)",
+    "Thiết kế hệ thống Skills phân tầng",
+    "Xây dựng Hard Gate và QA Contract",
+    "Xây dựng Hard Gate và QA Contract (tiếp 1)",
+    "Artifact và State Management",
+    "Lỗi TOC render ra text thô `TOC \\o \"1-3\" \\h \\z \\u`",
+    "Heading bị double-numbering — `1.2 1.2. Các thách thức...`",
+    "References là text thô, không phải auto-numbering",
+    "Kế hoạch Tuần Tiếp Theo"
+  ],
+  "content_start_index": 2,
+  "title_slide_updated": true,
+  "body_replaced": true,
+  "resident_mode": true,
+  "message": "Đã thay vùng slide nội dung bằng clone-fill-remove theo bounded range và giữ scaffold của template ở ngoài phạm vi thay."
+}
