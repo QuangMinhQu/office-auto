@@ -46,6 +46,11 @@ def style_score(entry: dict, target_kind: str) -> tuple[int, int, int]:
         numbered_like = 1 if "NUMBER" in name or "DANH SACH" in name else 0
         return (list_like, numbered_like, qformat)
 
+    if target_kind == "reference":
+        reference_like = 1 if any(token in name or token in style_id for token in ["REFERENCE", "BIBLIOGRAPHY", "TAILIEUTHAMKHAO", "TAI LIEU THAM KHAO"]) else 0
+        numbered_like = 1 if entry.get("num_id") not in (None, "", "0") else 0
+        return (reference_like + numbered_like, qformat + custom, 0)
+
     level = int(target_kind[1:]) - 1
     outline_match = 2 if outline is not None and str(outline) == str(level) else 0
     exact_heading = 1 if re.search(rf"\bHEADING\s*{level + 1}\b", name) else 0
@@ -73,6 +78,7 @@ def infer_style_map(profile: dict) -> dict:
         "h3": choose_style(style_catalog, "h3", "Heading3"),
         "body": choose_style(style_catalog, "body", "Normal"),
         "list": choose_style(style_catalog, "list", choose_style(style_catalog, "body", "Normal")),
+        "reference": choose_style(style_catalog, "reference", choose_style(style_catalog, "body", "Normal")),
     }
 
 

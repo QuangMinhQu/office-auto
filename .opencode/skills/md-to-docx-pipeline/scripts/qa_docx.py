@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import unicodedata
 import zipfile
 from pathlib import Path
@@ -17,6 +18,10 @@ ERROR_PATTERNS = [
 ]
 
 
+def qname(tag: str) -> str:
+    return f"{{{WORD_NAMESPACE['w']}}}{tag}"
+
+
 def read_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -30,6 +35,18 @@ def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
     return " ".join(ascii_text.upper().split())
+
+
+def strip_heading_numbering(text: str) -> str:
+    stripped = text.strip()
+    stripped = re.sub(r"^(?:CHƯƠNG\s+\d+\.?\s*|CHUONG\s+\d+\.?\s*)", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"^(?:\d+(?:\.\d+)*\.?\s+)", "", stripped)
+    stripped = re.sub(r"^(?:[IVXLCDM]+\.|[A-Z]\.)\s+", "", stripped)
+    return stripped.strip()
+
+
+def normalize_heading_text(text: str) -> str:
+    return normalize_text(strip_heading_numbering(text))
 
 
 def _check_section_breaks(document_root: ET.Element | None, template_profile: dict) -> bool:
@@ -85,12 +102,95 @@ def extract_paragraphs(document_root: ET.Element | None) -> list[dict]:
     return paragraphs
 
 
+def extract_bookmarks(document_root: ET.Element | None) -> set[str]:
+    if document_root is None:
+        return set()
+
+    names: set[str] = set()
+    for bookmark in document_root.findall(".//w:bookmarkStart", WORD_NAMESPACE):
+        name = bookmark.attrib.get(qname("name"))
+        if name:
+            names.add(name)
+    return names
+
+
+def strip_toc_page_number(text: str) -> str:
+    return re.sub(r"\s*\d+$", "", text.strip()).strip()
+
+
+def extract_toc_entries(document_root: ET.Element | None) -> list[dict]:
+    if document_root is None:
+        return []
+
+    body = document_root.find("w:body", WORD_NAMESPACE)
+    if body is None:
+        return []
+
+    entries: list[dict] = []
+    for index, paragraph in enumerate(body.findall("w:p", WORD_NAMESPACE)):
+        style = paragraph.find("w:pPr/w:pStyle", WORD_NAMESPACE)
+        style_id = None if style is None else style.attrib.get(qname("val"))
+        if not style_id or not style_id.lower().startswith("toc"):
+            continue
+
+        text = "".join(node.text or "" for node in paragraph.findall(".//w:t", WORD_NAMESPACE)).strip()
+        anchors = [
+            anchor
+            for anchor in (
+                hyperlink.attrib.get(qname("anchor"))
+                for hyperlink in paragraph.findall(".//w:hyperlink", WORD_NAMESPACE)
+            )
+            if anchor
+        ]
+        entries.append({
+            "index": index,
+            "style": style_id,
+            "text": text,
+            "anchors": anchors,
+            "heading_text": strip_toc_page_number(text),
+        })
+
+    return entries
+
+
+def update_fields_on_open(settings_root: ET.Element | None) -> bool:
+    if settings_root is None:
+        return False
+
+    update_fields = settings_root.find("w:updateFields", WORD_NAMESPACE)
+    if update_fields is None:
+        return False
+
+    value = update_fields.attrib.get(qname("val"))
+    if value is None:
+        return True
+    return value.lower() in {"1", "true", "on"}
+
+
+def count_dirty_fields(document_root: ET.Element | None) -> int:
+    if document_root is None:
+        return 0
+
+    dirty_count = 0
+    for field in document_root.findall(".//w:fldSimple", WORD_NAMESPACE):
+        if field.attrib.get(qname("dirty"), "").lower() in {"1", "true", "on"}:
+            dirty_count += 1
+    for field in document_root.findall(".//w:fldChar", WORD_NAMESPACE):
+        if field.attrib.get(qname("fldCharType")) != "begin":
+            continue
+        if field.attrib.get(qname("dirty"), "").lower() in {"1", "true", "on"}:
+            dirty_count += 1
+    return dirty_count
+
+
 def extract_heading_texts(paragraphs: list[dict]) -> list[str]:
     results: list[str] = []
     for paragraph in paragraphs:
         style = (paragraph.get("style") or "").lower()
         text = paragraph.get("text") or ""
         if not text:
+            continue
+        if style.startswith("toc"):
             continue
         normalized = normalize_text(text)
         if style.startswith("heading") or normalized.startswith("CHUONG "):
@@ -102,8 +202,8 @@ def is_subsequence(source: list[str], output: list[str]) -> bool:
     if not source:
         return True
 
-    source_normalized = [normalize_text(item) for item in source if item.strip()]
-    output_normalized = [normalize_text(item) for item in output if item.strip()]
+    source_normalized = [normalize_heading_text(item) for item in source if item.strip()]
+    output_normalized = [normalize_heading_text(item) for item in output if item.strip()]
 
     output_index = 0
     for source_item in source_normalized:
@@ -130,9 +230,12 @@ def main() -> None:
     target_file = Path(run_state.get("target_file"))
     target_exists = target_file.exists()
     document_root = read_xml_from_docx(target_file, "word/document.xml") if target_exists else None
+    settings_root = read_xml_from_docx(target_file, "word/settings.xml") if target_exists else None
     members = archive_members(target_file) if target_exists else []
     field_codes = extract_field_codes(document_root)
     paragraphs = extract_paragraphs(document_root)
+    bookmarks = extract_bookmarks(document_root)
+    toc_entries = extract_toc_entries(document_root)
     heading_texts = extract_heading_texts(paragraphs)
     source_headings = [item.get("text", "") for item in outline_payload.get("outline", [])]
     normalized_document_text = "\n".join(paragraph.get("text", "") for paragraph in paragraphs)
@@ -146,6 +249,40 @@ def main() -> None:
     header_count = len([name for name in members if name.startswith("word/header")])
     footer_count = len([name for name in members if name.startswith("word/footer")])
     required_parts_present = target_exists and "word/document.xml" in members and "word/styles.xml" in members
+    update_fields_enabled = update_fields_on_open(settings_root)
+    dirty_field_count = count_dirty_fields(document_root)
+    refresh_on_open_ready = toc_present and update_fields_enabled and dirty_field_count > 0
+
+    toc_missing_hyperlinks = [entry for entry in toc_entries if entry.get("text") and not entry.get("anchors")]
+    toc_broken_anchors = [
+        entry
+        for entry in toc_entries
+        if any(anchor not in bookmarks for anchor in entry.get("anchors", []))
+    ]
+    toc_heading_texts = [entry.get("heading_text", "") for entry in toc_entries if entry.get("heading_text")]
+    toc_rendered_matches_source = is_subsequence(source_headings, toc_heading_texts)
+    toc_links_ok = not toc_missing_hyperlinks and not toc_broken_anchors
+    toc_ok = (
+        "toc" not in required_preserve
+        or (
+            toc_present
+            and not toc_missing_hyperlinks
+            and (
+                (toc_rendered_matches_source and toc_links_ok)
+                or refresh_on_open_ready
+            )
+        )
+    )
+    cross_references_ok = (
+        not toc_entries
+        or (
+            not toc_missing_hyperlinks
+            and (
+                not toc_broken_anchors
+                or refresh_on_open_ready
+            )
+        )
+    )
 
     scaffold_checks = {
         "headers_footers": (
@@ -155,7 +292,7 @@ def main() -> None:
                 and footer_count >= template_profile.get("footer_count", 0)
             )
         ),
-        "toc": "toc" not in required_preserve or toc_present,
+        "toc": toc_ok,
         "list_of_figures": "list-of-figures" not in required_preserve or list_of_figures_present,
         "list_of_tables": "list-of-tables" not in required_preserve or list_of_tables_present,
         "section_breaks": _check_section_breaks(document_root, template_profile),
@@ -168,7 +305,7 @@ def main() -> None:
     template_heading_set = {
         normalize_text(item.get("text", ""))
         for item in template_profile.get("document_profile", {}).get("headings", [])
-        if item.get("text")
+        if item.get("text") and not str(item.get("style") or "").lower().startswith("toc")
     }
     source_heading_set = {normalize_text(item) for item in source_headings if item.strip()}
     residual_template_headings = sorted(
@@ -205,12 +342,20 @@ def main() -> None:
             "references": True,
             "appendix": True,
             "lists": scaffold_checks["list_of_figures"] and scaffold_checks["list_of_tables"],
-            "cross_references": True,
+            "cross_references": cross_references_ok,
             "header_footer": scaffold_checks["headers_footers"],
             "placeholder_leak": "{{" not in normalized_document_text and "<TODO>" not in normalized_document_text,
             "validate": target_exists,
             "section_breaks": scaffold_checks["section_breaks"],
         },
+        "toc_refresh_strategy": "update-fields-on-open" if refresh_on_open_ready else "rendered-in-package",
+        "update_fields_on_open": update_fields_enabled,
+        "dirty_field_count": dirty_field_count,
+        "bookmark_count": len(bookmarks),
+        "toc_entry_count": len(toc_entries),
+        "toc_rendered_matches_source": toc_rendered_matches_source,
+        "toc_missing_hyperlinks": [entry["index"] for entry in toc_missing_hyperlinks],
+        "toc_broken_anchor_entries": [entry["index"] for entry in toc_broken_anchors],
         "message": "QA đã kiểm package, scaffold, range và semantic gate cho contract preserve-template-scaffold."
     }
 

@@ -27,6 +27,7 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 - Section break và section settings vẫn còn.
 - Nếu template có TOC thì field TOC vẫn còn.
 - Nếu template có danh mục hình hoặc danh mục bảng thì field tương ứng vẫn còn.
+- Nếu output dựa vào refresh field khi mở file, phải có `word/settings.xml -> w:updateFields=true` và các field liên quan được đánh dấu dirty.
 
 ### 3. Range QA
 - `replace_ranges` trong `plan.json` phải ở trạng thái `resolved`.
@@ -47,6 +48,8 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 
 ### 6. TOC
 - Nếu tài liệu có TOC, heading mới phải được phản ánh trong TOC hoặc có kế hoạch rõ ràng để refresh/static fallback.
+- TOC render sẵn trong package phải giữ hyperlink hợp lệ; không chấp nhận paragraph style `TOC*` bị chèn text thuần không có hyperlink.
+- Nếu TOC chưa render sẵn đủ heading mới, chỉ được PASS khi file buộc Word refresh on open bằng `updateFields` và dirty field.
 - Nếu người nhận không refresh field, không được để lại chuỗi `Update field to see table of contents` mà vẫn coi là đã xong.
 
 ### 7. References
@@ -61,6 +64,7 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 - Danh mục bảng
 - Caption/sequence fields
 - Cross-reference/bookmark nội bộ
+- Hyperlink TOC không được trỏ tới bookmark đã mất; nếu còn phụ thuộc vào refresh-on-open thì phải chứng minh cơ chế refresh đã được bật.
 
 ### 10. Header/Footer/Page fields
 - Header/footer không bị ghi đè ngoài ý muốn.

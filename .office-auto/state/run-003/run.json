@@ -1,7 +1,7 @@
 {
   "mode_requested": "preserve-template-scaffold",
   "mode": "preserve-template-scaffold",
-  "source_file": "/home/minhquang/office-auto/2.md",
+  "source_file": "/home/minhquang/office-auto/chuong_2.md",
   "template_file": "/home/minhquang/office-auto/format_template.docx",
   "target_file": "/home/minhquang/office-auto/report.docx",
   "preserve": [
@@ -15,18 +15,18 @@
     {
       "name": "after-front-matter-to-end-of-main-story",
       "status": "resolved",
-      "paragraph_start_index": 22,
+      "paragraph_start_index": 42,
       "paragraph_end_index": 56,
       "preserves_front_matter": true
     }
   ],
   "artifacts": {
-    "content_ast": "/home/minhquang/office-auto/.office-auto/state/run-003/content_ast.json",
-    "content_outline": "/home/minhquang/office-auto/.office-auto/state/run-003/content_outline.json",
-    "template_profile": "/home/minhquang/office-auto/.office-auto/state/run-003/template_profile.json",
-    "plan": "/home/minhquang/office-auto/.office-auto/state/run-003/plan.json",
-    "build_report": "/home/minhquang/office-auto/.office-auto/state/run-003/build_report.json",
-    "qa_report": "/home/minhquang/office-auto/.office-auto/state/run-003/qa_report.json"
+    "content_ast": ".office-auto/state/run-003/content_ast.json",
+    "content_outline": ".office-auto/state/run-003/content_outline.json",
+    "template_profile": ".office-auto/state/run-003/template_profile.json",
+    "plan": ".office-auto/state/run-003/plan.json",
+    "build_report": ".office-auto/state/run-003/build_report.json",
+    "qa_report": ".office-auto/state/run-003/qa_report.json"
   },
   "status": "ready"
 }

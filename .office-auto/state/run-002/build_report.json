@@ -1,14 +1,38 @@
 {
-  "run": "run-002",
-  "mode": "rebuild-from-template-format",
-  "template_file": "/home/minhquang/office-auto/format_template.docx",
-  "source_file": "/home/minhquang/office-auto/chuong_2.md",
+  "status": "completed",
+  "mode": "preserve-template-scaffold",
   "target_file": "/home/minhquang/office-auto/report.docx",
+  "replace_range": {
+    "name": "after-front-matter-to-end-of-main-story",
+    "status": "resolved",
+    "paragraph_start_index": 42,
+    "paragraph_end_index": 56,
+    "preserves_front_matter": true
+  },
+  "preserve": [
+    "headers-footers",
+    "page-setup",
+    "section-breaks",
+    "styles-and-numbering",
+    "toc"
+  ],
+  "style_map": {
+    "h1": "Heading1",
+    "h2": "Heading2",
+    "h3": "Heading3",
+    "body": "Normal",
+    "list": "ListNumber5",
+    "reference": "TaiLieuThamKhao"
+  },
+  "template_header_count": 3,
+  "template_footer_count": 1,
   "body_children_before": 60,
-  "body_children_after": 66,
-  "blocks_added": 124,
-  "commands_total": 183,
-  "commands_succeeded": 183,
-  "commands_failed": 0,
-  "status": "completed"
+  "body_children_after": 107,
+  "replaced_child_count": 16,
+  "inserted_block_count": 63,
+  "body_replaced": true,
+  "dirty_field_count": 17,
+  "update_fields_on_open": true,
+  "field_refresh_strategy": "update-fields-on-open",
+  "message": "Đã thay vùng nội dung chính theo bounded range và giữ scaffold của template ở ngoài phạm vi thay."
 }

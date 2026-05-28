@@ -1,160 +1,207 @@
-Tôi đã đọc đủ toàn bộ codebase. Bây giờ phân tích toàn diện.
+Tôi đã đọc kỹ `build_docx.py`. Bây giờ phân tích chính xác từng lỗi từ DOCX template và script.
 
 ***
 
-# Root Cause Analysis: Tại sao output DOCX ra kém chất lượng
+# Phân tích 3 lỗi cụ thể sau run-005
 
-Sau khi đọc kỹ toàn bộ `.opencode/AGENTS.md`, 4 skills, 5 pipeline scripts, `task.md`, `issue.md` và `build_report.py`, tôi xác định được **3 lớp vấn đề** với mức độ ưu tiên rõ ràng. Vấn đề không nằm ở một chỗ duy nhất mà là sự kết hợp của cả ba, và chúng khuếch đại lẫn nhau.
+Cả 3 lỗi đều có **root cause khác nhau** và cần fix ở các lớp khác nhau — từ XML structure trong `build_docx.py` đến cách Word handle field codes.
 
 ***
 
-## Lớp 1: Script pipeline — lỗi nghiêm trọng nhất
+## Lỗi 1: TOC render ra text thô `TOC \o "1-3" \h \z \u`
 
-Đây là root cause số một, ảnh hưởng trực tiếp đến output cuối.
+### Root cause
 
-### `build_docx.py` — paragraph replace logic bị sai cơ bản
+TOC trong DOCX không phải là text — nó là một **field** (`w:fldChar` / `w:instrText` combo) hoặc **Structured Document Tag** (`w:sdt` với `w:sdtPr/w:docPart`). Khi `build_docx.py` đọc `word/document.xml` bằng `ElementTree` và rebuild bằng `ET.tostring()`, nó **không xử lý namespace đúng**.
 
-Script này dùng `paragraph_index_to_body_child_range()` để map từ "paragraph index" sang "child index trong `w:body`". Nhưng logic đang **skip `sectPr`** mà **không skip các child khác** như `w:tbl`, `w:sdt`, `w:bookmarkStart`, `w:bookmarkEnd`. Trong một DOCX thực tế từ Word, `w:body` chứa không chỉ `w:p` mà còn table (`w:tbl`), structured document tags (`w:sdt`), và nhiều element khác. Vì vậy, `paragraph_counter` sẽ **tính sai index**, khiến vùng bị xóa không đúng — có thể xóa nhầm cả bìa, TOC, hoặc danh mục.
+Cụ thể ở dòng này trong `replace_body_range`:
 
 ```python
-# BUG: chỉ skip sectPr và chỉ count w:p, bỏ qua w:tbl và w:sdt
-for child_index, child in enumerate(list(body)):
-    if child.tag == qname("sectPr"):
-        continue
-    if child.tag != qname("p"):   # <-- tbl, sdt, bookmarkStart bị bỏ qua
-        continue
-    paragraph_counter += 1
+document_bytes = ET.tostring(tree, encoding="utf-8", xml_declaration=False)
 ```
 
-Hệ quả: khi template có bảng (ví dụ trang bìa dạng bảng, bảng trong TOC section), `end_child_index` sẽ sai, dẫn đến replace sai vùng.
+`ET.tostring()` của Python's stdlib **không preserve namespace prefixes** — nó re-serializes mọi `xmlns:w=...` thành `ns0`, `ns1`, v.v. Kết quả là Word mở file lên không nhận ra các element thuộc namespace `w:` nữa. Nhưng tệ hơn: **`w:sdt` bị skip** trong `paragraph_index_to_body_child_range` vì logic chỉ count `w:p`, nhưng nếu TOC nằm trong `w:sdt` thì nó không bị xóa mà nội dung **upstream** của nó bị lệch index, gây replace sai range. Trong một số template, TOC field được viết dưới dạng `w:fldChar` + `w:instrText` trải qua nhiều `w:p` liên tiếp — những paragraph đó bị tính là paragraph thường và có thể bị include vào `replace_range`, sau đó bị xóa đi, **thay bằng text thô** của `instrText`.
 
-### `build_docx.py` — `make_paragraph` quá đơn giản, không map numbering
+Kiểm tra template: file DOCX sample của bạn có dòng `TOC \o "1-3" \h \z \u` xuất hiện trực tiếp — đây là `w:instrText` content của field code, bị render thành text vì **`w:fldChar w:fldCharType="begin"`** và **`w:fldChar w:fldCharType="end"`** đã bị mất khi script xóa các paragraph liên quan.
 
-Hàm `make_paragraph` chỉ tạo `w:p` với `pStyle` và một `w:r/w:t` duy nhất. Nó **không chèn `w:numPr`** (numbering properties) cho heading có đánh số, **không chèn `rPr`** (run properties như bold, italic), và **không handle `inline markup`** trong Markdown (dấu `**bold**`, `*italic*`, inline code). Kết quả là toàn bộ nội dung ra đều dạng plain text không có bold, không có số thứ tự heading, và không có table thực sự.
+### Fix
 
-### `profile_template.py` — `replace_range` định nghĩa sai biên
+Có 2 hướng:
 
-Logic detect range như sau:
+**Hướng A (đúng về dài hạn):** Detect và preserve tất cả paragraph thuộc TOC field trước khi replace. TOC field trải qua nhiều paragraph, bắt đầu từ paragraph có `w:fldChar[@w:fldCharType='begin']` chứa `w:instrText` có `TOC`, kết thúc tại paragraph có `w:fldChar[@w:fldCharType='end']`. Những paragraph này phải được **excluded hoàn toàn** khỏi `replace_range`.
 
 ```python
-if first_heading_index is not None:
-    replace_candidates.append({
-        "paragraph_start_index": first_heading_index,
-        "paragraph_end_index": last_paragraph_index,
-        ...
-    })
+def find_toc_paragraph_indices(body: ET.Element) -> set[int]:
+    """Trả set paragraph_index của tất cả w:p thuộc TOC field."""
+    toc_indices = set()
+    in_toc = False
+    para_idx = -1
+    toc_start_para = None
+    
+    for child in body:
+        if child.tag == qname("sectPr"):
+            continue
+        if child.tag != qname("p"):
+            continue
+        para_idx += 1
+        
+        for fld in child.iter(qname("fldChar")):
+            fld_type = fld.get(qname("fldCharType"))
+            if fld_type == "begin":
+                # Check instrText trong cùng paragraph hoặc paragraph tiếp theo
+                in_toc = True
+                toc_start_para = para_idx
+        for instr in child.iter(qname("instrText")):
+            if "TOC" in (instr.text or ""):
+                in_toc = True
+        for fld in child.iter(qname("fldChar")):
+            if fld.get(qname("fldCharType")) == "end" and in_toc:
+                in_toc = False
+                if toc_start_para is not None:
+                    for i in range(toc_start_para, para_idx + 1):
+                        toc_indices.add(i)
+        
+        if in_toc and toc_start_para is not None:
+            toc_indices.add(para_idx)
+    
+    return toc_indices
 ```
 
-`last_paragraph_index = len(paragraphs) - 1` tức là **tính đến paragraph cuối cùng trong body**. Trong DOCX, `w:body` thường có một `sectPr` hoặc paragraph cuối chứa section properties. Bằng cách replace đến `last_paragraph_index`, script **xóa cả paragraph chứa `sectPr` của body**, làm mất section break cuối — đây là phần mang thông tin page size, margins, và header/footer linking. Đây là lý do header/footer hay bị mất hoặc bị lỗi.
+Sau đó trong `profile_template.py`, khi tính `replace_range`, trừ ra các index thuộc TOC để `paragraph_start_index` bắt đầu **sau** TOC.
 
-### `parse_markdown.py` — parser quá sơ sài
+**Hướng B (nhanh hơn, đủ dùng ngay):** Trong `profile_template.py`, detect paragraph đầu tiên có `instrText` chứa `TOC` hoặc heading style `"TOC"`, và set `paragraph_start_index = max(toc_end_index + 1, first_heading_index)`.
 
-Parser không xử lý được:
-- Numbered lists (`1. `, `2. `)
-- Nested lists (indent-based)
-- Bold/italic inline (`**`, `*`, `__`)
-- Code blocks (fenced với ` ``` `)
-- Blockquotes (`>`)
-- Horizontal rules
+***
 
-Toàn bộ inline formatting bị gộp vào text thô. Một câu như `**Kết luận:** abc` sẽ ra `**Kết luận:** abc` thay vì run bold rồi run normal.
+## Lỗi 2: Heading bị duplicate — `1.2 1.2. Các thách thức...`
 
-### `plan_mapping.py` — `style_map` infer cơ học
+### Root cause
+
+Đây là lỗi **double-numbering**: phần `1.2` đầu tiên là auto-numbering từ `w:numPr` (list numbering được gắn vào heading style của template), phần `1.2.` thứ hai là **text literal từ Markdown** mà `parse_markdown.py` giữ nguyên trong `block.text`.
+
+Script `parse_markdown.py` parse heading như sau:
 
 ```python
-"h1": style_names.get("heading 1") or style_names.get("heading1") or "Heading 1",
+# Nếu heading text là: "1.2. Các thách thức phổ biến..."
+# thì block["text"] = "1.2. Các thách thức phổ biến..."
 ```
 
-Logic này match theo **lowercase name** của style. Nhưng trong DOCX tiếng Việt dùng font VN, style thường có tên dạng `Tieu-de-1`, `Heading_VN1`, hoặc custom style như `Chuong`. `plan_mapping.py` sẽ fallback về `"Heading 1"` — style mặc định của Word, không phải style custom của template — nên numbering và formatting của heading không được áp đúng.
+Và `build_docx.py` tạo paragraph với `pStyle = "Heading2"` — style này trong template của bạn đã có `w:numPr` linked đến numbering definition, tức là Word tự render thêm `1.2` ở đầu. Kết quả: `1.2` (auto) + `1.2. Các thách thức...` (text) = `1.2 1.2. Các thách thức...`.
+
+### Fix
+
+Trong `parse_markdown.py`, khi parse heading, **strip prefix numbering** trước khi lưu vào `block["text"]`:
+
+```python
+import re
+
+def strip_heading_numbering(text: str) -> str:
+    """
+    Xóa prefix dạng '1.', '1.2.', '1.2.3.', 'CHƯƠNG 1.', 'I.', 'A.'
+    khỏi heading text để tránh double-numbering với w:numPr.
+    """
+    # Pattern: số + dấu chấm, có thể lặp, có thể có space
+    text = re.sub(r'^(?:CHƯƠNG\s+\d+\.\s*|[\d]+(?:\.[\d]+)*\.?\s+)', '', text.strip())
+    # Pattern: chữ số La Mã hoặc chữ hoa
+    text = re.sub(r'^(?:[IVX]+\.|[A-Z]\.)\s+', '', text)
+    return text.strip()
+```
+
+Và áp dụng khi extract heading:
+
+```python
+if line.startswith("#"):
+    level = len(line) - len(line.lstrip("#"))
+    raw_text = line.lstrip("#").strip()
+    clean_text = strip_heading_numbering(raw_text)
+    blocks.append({"type": "heading", "level": level, "text": clean_text, "runs": [{"text": clean_text}]})
+```
+
+Đây là fix dứt điểm nhất. Lý do là template của bạn **đã có** numbering được quản lý bởi `w:abstractNumId` trong `word/numbering.xml` — việc script chèn text số vào heading là thừa và gây conflict.
 
 ***
 
-## Lớp 2: Skill config — agent bị routing sai và thiếu constraint
+## Lỗi 3: References là text thô, không phải auto-numbering
 
-### `officecli-docx` vs `AGENTS.md` conflict vẫn còn
+### Root cause
 
-`AGENTS.md` nói: *"Chỉ load `officecli-docx` khi cần tra cứu cú pháp"*. Nhưng `docx-from-template/SKILL.md` trong phần usage không có đủ constraint để ngăn agent tự dùng OfficeCLI ad-hoc bên ngoài pipeline. Kết quả là agent có thể chạy OfficeCLI commands trực tiếp thay vì qua pipeline scripts, bypassing toàn bộ artifact system.
+Đây là lỗi hiểu nhầm bản chất của  trong template Word. Trong DOCX mẫu chuẩn, phần tài liệu tham khảo dùng **list numbering** (`w:numPr`) — tương tự như heading, mỗi entry trong references list là một `w:p` với style `"References"` hoặc style nào đó linked đến một `w:abstractNum` có `w:numFmt` là `decimal` (số thập phân trong ngoặc: `[%1]`). Số `[2]` không phải text mà là **field value** được Word render từ định nghĩa numbering format.
 
-### `md-to-docx-pipeline/SKILL.md` — script contracts không có error contract
+Script hiện tại parse references từ Markdown dạng:
 
-Contract trong skill chỉ mô tả happy path (input/output). Không có phần nào mô tả **khi nào script phải raise exception vs return error JSON**, nên agent không biết cách handle khi `plan.json` có `status: blocked`. Agent thường tiếp tục chạy `build_docx.py` ngay cả khi plan bị blocked, hoặc ngược lại kết luận xong khi chưa chạy.
+```markdown
+ Krizhevsky, A., Sutskever, I., & Hinton, G. E. (2012)...
+```
 
-### `docx-qa/SKILL.md` — QA checklist không có threshold cụ thể
+và lưu nguyên `block["text"] = " Krizhevsky..."`. Khi build, `make_paragraph` tạo paragraph với style `"Normal"` hoặc `"References"`, nhưng **không gắn `w:numPr`**. Kết quả là text thô, không phải auto number.
 
-Checklist có các item như *"header/footer không bị mất hoặc giảm bất thường"* nhưng không định nghĩa **thế nào là bất thường**. Agent open model không biết rằng nếu template có 2 header nhưng output chỉ còn 1 là fail. Cần threshold số học rõ ràng: `header_count_output >= header_count_template`.
+Có thêm một vấn đề: nếu template có numbering format dạng `[%1]`, thì khi chèn paragraph với cả text  lẫn `w:numPr`, sẽ ra ` Krizhevsky...`. 
+
+### Fix
+
+**Bước 1:** Trong `parse_markdown.py`, detect references section và strip prefix `[N]`:
+
+```python
+import re
+
+def parse_reference_line(text: str) -> dict | None:
+    """Parse ' Author...' thành block reference không có prefix số."""
+    m = re.match(r'^\[(\d+)\]\s+(.*)', text.strip())
+    if m:
+        return {
+            "type": "reference",
+            "ordinal": int(m.group(1)),
+            "text": m.group(2).strip(),
+            "runs": [{"text": m.group(2).strip()}]
+        }
+    return None
+```
+
+**Bước 2:** Trong `plan_mapping.py`, map `"reference"` type sang style của template:
+
+```python
+style_map = {
+    ...
+    "reference": style_names.get("references") 
+                 or style_names.get("tài liệu tham khảo")
+                 or style_names.get("bibliography")
+                 or "Normal",
+}
+```
+
+**Bước 3:** Trong `build_docx.py`, khi `block["type"] == "reference"`, gắn `w:numPr` vào `pPr` **nếu** style của references có numbering trong template:
+
+```python
+def get_style_num_id(template_profile: dict, style_name: str) -> tuple[int, int] | None:
+    """Lấy (numId, ilvl) từ template_profile nếu style có numbering."""
+    style_num = template_profile.get("style_numbering", {})
+    entry = style_num.get(style_name)
+    if entry:
+        return entry.get("numId"), entry.get("ilvl", 0)
+    return None
+
+# Trong make_paragraph:
+if block.get("type") == "reference":
+    num_info = get_style_num_id(template_profile, paragraph_style_name)
+    if num_info:
+        num_id, ilvl = num_info
+        num_pr = make_element("numPr")
+        ilvl_el = make_element("ilvl"); ilvl_el.set(qname("val"), str(ilvl))
+        num_id_el = make_element("numId"); num_id_el.set(qname("val"), str(num_id))
+        num_pr.append(ilvl_el); num_pr.append(num_id_el)
+        paragraph_properties.append(num_pr)
+```
+
+Tuy nhiên, **trước hết** cần `profile_template.py` extract thêm `style_numbering` map — hiện tại script này không extract `w:numPr` default của từng style từ `word/styles.xml`. Đây là field còn thiếu trong `template_profile.json`.
 
 ***
 
-## Lớp 3: OfficeCLI format reading — hạn chế có thật nhưng không phải root cause
+## Tóm tắt fix ưu tiên
 
-OfficeCLI đọc DOCX tốt ở mức structure (open/close, get element, set prop). Vấn đề không phải OfficeCLI không hiểu format, mà là **pipeline scripts đang bypass OfficeCLI hoàn toàn** — họ đọc thẳng `word/document.xml` bằng Python `xml.etree.ElementTree` rồi ghi thẳng vào ZIP. Cách này bỏ qua toàn bộ relationship management của OfficeCLI:
-
-- `word/_rels/document.xml.rels` — quan hệ giữa body và header/footer, images
-- `[Content_Types].xml` — type registry cho các part mới
-- `word/settings.xml` — compat settings
-- `word/fontTable.xml` — font embedding
-
-Khi script ghi thẳng, các relationship này có thể bị stale, khiến Word mở file lên thấy header/footer không link đúng section, hoặc numbering bị reset.
-
-***
-
-## Bản đồ lỗi → Fix ưu tiên
-
-| Lỗi quan sát | Root cause | Fix |
+| Lỗi | File cần sửa | Loại fix |
 |---|---|---|
-| Heading không có số thứ tự | `make_paragraph` không chèn `w:numPr` | Thêm numPr lookup từ `template_profile.json` |
-| Bold/italic mất hết | Parser không parse inline markup | Thêm inline parser cho `**`, `*`, code |
-| Trang bìa/TOC bị xóa | `replace_range` end đến `last_paragraph`, bao gồm sectPr | Exclude last paragraph nếu chứa sectPr |
-| Header/footer mất | Ghi thẳng XML không sync rels | Kiểm tra headers vẫn reference đúng trong rels sau build |
-| Heading style không match | `style_map` fallback về `"Heading 1"` dù template dùng custom style | Thêm fuzzy match theo style type attribute thay vì name |
-| `w:tbl` trong template bị xóa nhầm | `paragraph_index_to_body_child_range` chỉ count `w:p` | Đếm tất cả non-sectPr children, không chỉ `w:p` |
+| TOC bị render thành text | `profile_template.py` + `build_docx.py` | Detect & exclude TOC field paragraphs khỏi replace_range |
+| Heading double-numbering | `parse_markdown.py` | Strip prefix số trước khi lưu vào `block["text"]` |
+| References text thô | `parse_markdown.py` + `profile_template.py` + `build_docx.py` | Strip `[N]` prefix, extract `style_numbering` từ styles.xml, gắn `w:numPr` khi build |
 
-***
-
-## Fix ngay lập tức — 3 thay đổi có ROI cao nhất
-
-**Fix 1 — `profile_template.py`:** Khi tính `paragraph_end_index`, trừ đi các paragraph cuối chứa `sectPr` hoặc chỉ chứa `pPr/sectPr`:
-
-```python
-# Tìm last "real content" paragraph, không phải last paragraph của body
-last_paragraph_index = None
-for i, p in reversed(list(enumerate(paragraphs))):
-    ppr = p.find("w:pPr/w:sectPr", WORD_NAMESPACE)
-    if ppr is None and paragraph_text(p).strip():
-        last_paragraph_index = i
-        break
-```
-
-**Fix 2 — `build_docx.py`:** Đếm tất cả children, không chỉ `w:p`, khi map paragraph index:
-
-```python
-for child_index, child in enumerate(list(body)):
-    if child.tag == qname("sectPr"):
-        continue
-    # Đếm mọi child là real content (p, tbl, sdt, ...)
-    if child.tag == qname("p"):
-        paragraph_counter += 1
-    # w:tbl, w:sdt vẫn chiếm child_index nhưng không tăng paragraph_counter
-```
-
-**Fix 3 — `parse_markdown.py`:** Thêm inline markup parser để `make_paragraph` có thể tạo multi-run với `w:rPr`:
-
-```python
-def parse_inline(text: str) -> list[dict]:
-    """Trả list runs: [{"text": ..., "bold": bool, "italic": bool}]"""
-    import re
-    runs = []
-    pattern = re.compile(r'(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|(.+?)(?=\*\*|\*|`|$))', re.DOTALL)
-    for m in pattern.finditer(text):
-        if m.group(2): runs.append({"text": m.group(2), "bold": True, "italic": False})
-        elif m.group(3): runs.append({"text": m.group(3), "bold": False, "italic": True})
-        elif m.group(4): runs.append({"text": m.group(4), "bold": False, "italic": False, "code": True})
-        elif m.group(5): runs.append({"text": m.group(5), "bold": False, "italic": False})
-    return [r for r in runs if r["text"]]
-```
-
-***
-
-## Kết luận phân tích
-
-Vấn đề chính **không phải** do OfficeCLI không đọc được DOCX, cũng **không phải** do agent không hiểu format — mà do 3 script (`profile_template.py`, `build_docx.py`, `parse_markdown.py`) có logic sai làm sai lệch replace range, xóa nhầm sectPr, và mất toàn bộ inline formatting. Skill config chỉ là vấn đề thứ yếu gây token bloat và routing nhầm, không phải root cause của output xấu. Ưu tiên fix pipeline scripts trước, sau đó mới tightening skill constraints.
+Fix theo thứ tự: **heading numbering** trước (1 file, 5 dòng, impact ngay), rồi **TOC detection** (phức tạp hơn, cần test), rồi **references numbering** (cần thêm field vào `profile_template.py` trước).

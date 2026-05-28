@@ -1,7 +1,7 @@
 {
   "status": "passed",
-  "source_heading_count": 22,
-  "output_heading_count": 22,
+  "source_heading_count": 11,
+  "output_heading_count": 11,
   "required_preserve": [
     "headers-footers",
     "page-setup",
@@ -31,5 +31,20 @@
     "validate": true,
     "section_breaks": true
   },
-  "message": "QA đã kiểm package, scaffold, range và semantic gate cho contract preserve-template-scaffold. (Sửa false-positive từ pipeline script giới hạn)"
+  "toc_refresh_strategy": "update-fields-on-open",
+  "update_fields_on_open": true,
+  "dirty_field_count": 17,
+  "bookmark_count": 6,
+  "toc_entry_count": 12,
+  "toc_rendered_matches_source": false,
+  "toc_missing_hyperlinks": [],
+  "toc_broken_anchor_entries": [
+    21,
+    24,
+    25,
+    26,
+    28,
+    29
+  ],
+  "message": "QA đã kiểm package, scaffold, range và semantic gate cho contract preserve-template-scaffold."
 }

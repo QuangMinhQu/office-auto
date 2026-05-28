@@ -33,6 +33,7 @@ Dự án này tự động tạo file Word (.docx) từ nội dung Markdown theo
 	- header/footer còn tồn tại và không bị giảm bất thường
 	- section break hoặc section settings vẫn còn
 	- nếu template có TOC hoặc danh mục hình/bảng thì các field tương ứng vẫn còn trong file đích
+	- với TOC, hoặc result trong package đã có hyperlink/bookmark hợp lệ, hoặc file buộc Word refresh on open bằng `updateFields` và dirty field
 - Phải có bằng chứng semantic rằng vùng nội dung chính đã bị thay thế, tối thiểu gồm:
 	- outline của file kết quả khớp outline nguồn theo thứ tự
 	- không còn heading/chương cũ của template bên trong vùng đã thay

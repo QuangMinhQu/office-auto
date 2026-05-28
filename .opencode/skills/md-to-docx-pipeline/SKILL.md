@@ -63,6 +63,7 @@ Không nên thấy:
 - Input: `--run-dir`
 - Output: `build_report.json`
 - Trách nhiệm: chỉ chạy bounded replacement; nếu range chưa resolve thì fail-closed.
+- Nếu template có TOC hoặc field dẫn hướng phụ thuộc heading, script phải đánh dấu field là stale/dirty và bật `word/settings.xml -> w:updateFields` để Word refresh khi mở file.
 - Error contract: khi `plan.json.status=blocked`, script phải ghi `build_report.json.status=blocked`, không tạo output giả hoàn tất và phải giữ `run.json.status=blocked`.
 
 ### `qa_docx.py`
@@ -70,6 +71,7 @@ Không nên thấy:
 - Output: `qa_report.json`
 - Trách nhiệm: kiểm package QA, structural QA, range QA và semantic QA.
 - Threshold tối thiểu: `header_count_output >= header_count_template`, `footer_count_output >= footer_count_template`, và nếu template có TOC hoặc danh mục hình/bảng thì field tương ứng phải còn trong file đích.
+- Nếu TOC đang dựa vào refresh-on-open, QA phải xác nhận `updateFields` đã bật và field liên quan đã được đánh dấu dirty; nếu TOC đã render sẵn trong package thì hyperlink/anchor của các entry phải còn hợp lệ.
 
 ## Quy tắc
 - Mỗi script phải ghi artifact ngắn, có schema ổn định.

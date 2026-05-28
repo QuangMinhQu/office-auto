@@ -9,6 +9,33 @@ from pathlib import Path
 INLINE_PATTERN = re.compile(r"(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_|`[^`]+`)")
 ORDERED_LIST_PATTERN = re.compile(r"^(\s*)(\d+)\.\s+(.*)$")
 UNORDERED_LIST_PATTERN = re.compile(r"^(\s*)([-*])\s+(.*)$")
+REFERENCE_PATTERN = re.compile(r"^\[(\d+)\]\s+(.*)$")
+
+
+def normalize_heading_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip()).upper()
+
+
+def strip_heading_numbering(text: str) -> str:
+    stripped = text.strip()
+    stripped = re.sub(r"^(?:CHƯƠNG\s+\d+\.?\s*|CHUONG\s+\d+\.?\s*)", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"^(?:\d+(?:\.\d+)*\.?\s+)", "", stripped)
+    stripped = re.sub(r"^(?:[IVXLCDM]+\.|[A-Z]\.)\s+", "", stripped)
+    return stripped.strip()
+
+
+def parse_reference_line(text: str) -> dict | None:
+    match = REFERENCE_PATTERN.match(text.strip())
+    if match is None:
+        return None
+    ordinal = int(match.group(1))
+    content = match.group(2).strip()
+    return {
+        "type": "reference",
+        "ordinal": ordinal,
+        "text": content,
+        "runs": parse_inline(content),
+    }
 
 
 def parse_inline(text: str) -> list[dict]:
@@ -44,6 +71,7 @@ def parse_markdown_blocks(text: str) -> tuple[list[dict], list[dict]]:
     paragraph_buffer: list[str] = []
     code_block_buffer: list[str] = []
     in_code_block = False
+    in_references = False
 
     def flush_paragraph() -> None:
         if not paragraph_buffer:
@@ -85,7 +113,8 @@ def parse_markdown_blocks(text: str) -> tuple[list[dict], list[dict]]:
         if line.lstrip().startswith("#"):
             flush_paragraph()
             level = len(line) - len(line.lstrip("#"))
-            title = line[level:].strip()
+            raw_title = line[level:].strip()
+            title = strip_heading_numbering(raw_title)
             heading = {
                 "type": "heading",
                 "level": level,
@@ -95,7 +124,15 @@ def parse_markdown_blocks(text: str) -> tuple[list[dict], list[dict]]:
             }
             blocks.append(heading)
             outline.append({"level": level, "text": title, "line": line_number})
+            in_references = normalize_heading_text(title) == "TÀI LIỆU THAM KHẢO"
             continue
+
+        if in_references:
+            reference_block = parse_reference_line(line)
+            if reference_block is not None:
+                reference_block["line"] = line_number
+                blocks.append(reference_block)
+                continue
 
         ordered_match = ORDERED_LIST_PATTERN.match(line)
         if ordered_match:

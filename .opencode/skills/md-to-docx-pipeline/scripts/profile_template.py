@@ -67,6 +67,31 @@ def extract_style_catalog(styles_root: ET.Element | None) -> list[dict]:
     return catalog
 
 
+def extract_style_numbering(style_catalog: list[dict]) -> dict:
+    lookup = {entry.get("style_id"): entry for entry in style_catalog if entry.get("style_id")}
+
+    def resolve(style_id: str | None, seen: set[str]) -> dict | None:
+        if not style_id or style_id in seen:
+            return None
+        entry = lookup.get(style_id)
+        if entry is None:
+            return None
+
+        num_id = entry.get("num_id")
+        ilvl = entry.get("ilvl")
+        if num_id not in (None, "", "0"):
+            return {"numId": int(num_id), "ilvl": 0 if ilvl in (None, "") else int(ilvl)}
+
+        return resolve(entry.get("based_on"), seen | {style_id})
+
+    style_numbering: dict = {}
+    for style_id in lookup:
+        numbering = resolve(style_id, set())
+        if numbering is not None:
+            style_numbering[style_id] = numbering
+    return style_numbering
+
+
 def detect_header_footer_members(docx_path: Path) -> dict:
     with zipfile.ZipFile(docx_path) as archive:
         members = archive.namelist()
@@ -117,6 +142,47 @@ def paragraph_style(paragraph: ET.Element) -> str | None:
     return style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val")
 
 
+def field_char_type(node: ET.Element) -> str | None:
+    return node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}fldCharType")
+
+
+def paragraph_instr_text(paragraph: ET.Element) -> str:
+    return " ".join((node.text or "") for node in paragraph.findall(".//w:instrText", WORD_NAMESPACE)).strip()
+
+
+def find_toc_paragraph_indices(paragraphs: list[ET.Element]) -> set[int]:
+    toc_indices: set[int] = set()
+    pending_field_start: int | None = None
+    in_toc = False
+
+    for index, paragraph in enumerate(paragraphs):
+        style_id = paragraph_style(paragraph)
+        field_types = [field_char_type(node) for node in paragraph.findall(".//w:fldChar", WORD_NAMESPACE)]
+        instr_text = normalize_text(paragraph_instr_text(paragraph))
+        has_toc_instruction = " TOC " in f" {instr_text} " or instr_text.startswith("TOC")
+        toc_style = normalize_text(style_id or "").startswith("TOC")
+
+        if "begin" in field_types and pending_field_start is None:
+            pending_field_start = index
+
+        if has_toc_instruction or toc_style:
+            in_toc = True
+            if pending_field_start is None:
+                pending_field_start = index
+
+        if in_toc and pending_field_start is not None:
+            for paragraph_index in range(pending_field_start, index + 1):
+                toc_indices.add(paragraph_index)
+
+        if "end" in field_types and in_toc:
+            in_toc = False
+            pending_field_start = None
+        elif "end" in field_types and pending_field_start is not None:
+            pending_field_start = None
+
+    return toc_indices
+
+
 def classify_body(document_root: ET.Element | None) -> dict:
     if document_root is None:
         return {
@@ -142,6 +208,7 @@ def classify_body(document_root: ET.Element | None) -> dict:
         }
 
     paragraphs = body.findall("w:p", WORD_NAMESPACE)
+    toc_paragraph_indices = find_toc_paragraph_indices(paragraphs)
     headings: list[dict] = []
     anchor_candidates: list[dict] = []
     preview: list[dict] = []
@@ -160,8 +227,14 @@ def classify_body(document_root: ET.Element | None) -> dict:
             entry = {"paragraph_index": index, "style": style, "text": text}
             headings.append(entry)
             anchor_candidates.append(entry)
-            if first_heading_index is None:
+            if first_heading_index is None and index not in toc_paragraph_indices:
                 first_heading_index = index
+
+    if first_heading_index is None and headings:
+        first_heading_index = headings[0]["paragraph_index"]
+
+    if toc_paragraph_indices and first_heading_index is not None and first_heading_index <= max(toc_paragraph_indices):
+        first_heading_index = max(toc_paragraph_indices) + 1
 
     last_paragraph_index: int | None = None
     for index in range(len(paragraphs) - 1, -1, -1):
@@ -208,7 +281,9 @@ def classify_body(document_root: ET.Element | None) -> dict:
             "front_matter_end_paragraph_index": first_heading_index - 1 if first_heading_index not in (None, 0) else None,
             "main_content_start_paragraph_index": first_heading_index,
             "main_content_end_paragraph_index": last_paragraph_index,
+            "toc_end_paragraph_index": max(toc_paragraph_indices) if toc_paragraph_indices else None,
         },
+        "toc_paragraph_indices": sorted(toc_paragraph_indices),
         "preview": preview,
     }
 
@@ -252,10 +327,12 @@ def main() -> None:
     field_codes = extract_field_codes(document_root)
     document_profile = classify_body(document_root)
 
+    style_catalog = extract_style_catalog(styles_root)
     payload = {
         "template_file": str(template_file),
         "style_names": extract_style_names(styles_root),
-        "style_catalog": extract_style_catalog(styles_root),
+        "style_catalog": style_catalog,
+        "style_numbering": extract_style_numbering(style_catalog),
         "has_numbering": numbering_root is not None,
         "has_document_xml": document_root is not None,
         "header_count": len(header_footer["headers"]),

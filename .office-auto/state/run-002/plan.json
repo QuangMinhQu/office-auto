@@ -1,16 +1,17 @@
 {
   "mode_requested": "preserve-template-scaffold",
   "mode": "preserve-template-scaffold",
-  "source_file": "chuong_2.md",
-  "template_file": "format_template.docx",
-  "target_file": "report.docx",
+  "source_file": "/home/minhquang/office-auto/chuong_2.md",
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "target_file": "/home/minhquang/office-auto/report.docx",
   "heading_count": 11,
   "style_map": {
     "h1": "Heading1",
     "h2": "Heading2",
     "h3": "Heading3",
     "body": "Normal",
-    "list": "ListNumber5"
+    "list": "ListNumber5",
+    "reference": "TaiLieuThamKhao"
   },
   "has_numbering": true,
   "preserve": [
@@ -24,7 +25,7 @@
     {
       "name": "after-front-matter-to-end-of-main-story",
       "status": "resolved",
-      "paragraph_start_index": 22,
+      "paragraph_start_index": 42,
       "paragraph_end_index": 56,
       "preserves_front_matter": true
     }

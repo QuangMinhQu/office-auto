@@ -87,5 +87,6 @@ Nếu chưa chứng minh được các điều trên, agent phải coi task là 
 - File đầu ra là `report.docx`.
 - `report.docx` phản ánh đầy đủ nội dung hiện có trong `chuong_2.md` ở vùng nội dung chính.
 - Template tiếp tục giữ scaffold hình thức thay vì chỉ còn vai trò “nguồn style”.
+- File cuối phải có mục lục đã update đủ các chương có trong nội dung version cuối cùng. 
 - File cuối phải validate sạch, không còn placeholder thừa, không mất mục lục hoặc các phần dẫn hướng tương tự nếu template ban đầu có.
 - File cuối không được có duplicate chapter pattern khi copy text thô ra ngoài.
