@@ -1,0 +1,35 @@
+{
+  "status": "passed",
+  "source_heading_count": 11,
+  "output_heading_count": 11,
+  "required_preserve": [
+    "headers-footers",
+    "page-setup",
+    "section-breaks",
+    "styles-and-numbering",
+    "toc"
+  ],
+  "required_parts_present": true,
+  "scaffold_preserved": true,
+  "replace_ranges_resolved": true,
+  "outline_ok": true,
+  "body_replaced_ok": true,
+  "template_residue": false,
+  "residual_template_headings": [],
+  "duplicate_heading_patterns": [],
+  "checks": {
+    "package": true,
+    "outline": true,
+    "numbering": true,
+    "toc": true,
+    "references": true,
+    "appendix": true,
+    "lists": true,
+    "cross_references": true,
+    "header_footer": true,
+    "placeholder_leak": true,
+    "validate": true,
+    "section_breaks": true
+  },
+  "message": "QA đã kiểm package, scaffold, range và semantic gate cho contract preserve-template-scaffold."
+}

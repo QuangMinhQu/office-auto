@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import unicodedata
 import zipfile
 from pathlib import Path
@@ -32,6 +33,40 @@ def extract_style_names(styles_root: ET.Element | None) -> list[str]:
     return sorted(set(names))
 
 
+def extract_style_catalog(styles_root: ET.Element | None) -> list[dict]:
+    if styles_root is None:
+        return []
+
+    catalog: list[dict] = []
+    for style in styles_root.findall("w:style", WORD_NAMESPACE):
+        style_type = style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}type")
+        style_id = style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}styleId")
+        if style_type != "paragraph" or not style_id:
+            continue
+
+        name_node = style.find("w:name", WORD_NAMESPACE)
+        outline_node = style.find("w:pPr/w:outlineLvl", WORD_NAMESPACE)
+        based_on_node = style.find("w:basedOn", WORD_NAMESPACE)
+        num_id_node = style.find("w:pPr/w:numPr/w:numId", WORD_NAMESPACE)
+        ilvl_node = style.find("w:pPr/w:numPr/w:ilvl", WORD_NAMESPACE)
+
+        catalog.append(
+            {
+                "style_id": style_id,
+                "name": None if name_node is None else name_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
+                "default": style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}default") == "1",
+                "custom": style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}customStyle") == "1",
+                "qformat": style.find("w:qFormat", WORD_NAMESPACE) is not None,
+                "outline_level": None if outline_node is None else outline_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
+                "based_on": None if based_on_node is None else based_on_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
+                "num_id": None if num_id_node is None else num_id_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
+                "ilvl": None if ilvl_node is None else ilvl_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
+            }
+        )
+
+    return catalog
+
+
 def detect_header_footer_members(docx_path: Path) -> dict:
     with zipfile.ZipFile(docx_path) as archive:
         members = archive.namelist()
@@ -44,6 +79,13 @@ def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
     return " ".join(ascii_text.upper().split())
+
+
+def looks_like_heading_style(style: str | None) -> bool:
+    if not style:
+        return False
+    normalized = normalize_text(style)
+    return bool(re.search(r"\bHEADING\s*[1-9]\b", normalized)) or "TIEU DE" in normalized or normalized.startswith("CHUONG")
 
 
 def extract_field_codes(document_root: ET.Element | None) -> list[str]:
@@ -109,7 +151,7 @@ def classify_body(document_root: ET.Element | None) -> dict:
         text = paragraph_text(paragraph)
         style = paragraph_style(paragraph)
         normalized = normalize_text(text)
-        is_heading = bool(style and style.lower().startswith("heading")) or normalized.startswith("CHUONG ")
+        is_heading = looks_like_heading_style(style) or normalized.startswith("CHUONG ")
 
         if text and len(preview) < 12:
             preview.append({"paragraph_index": index, "style": style, "text": text[:160]})
@@ -121,7 +163,16 @@ def classify_body(document_root: ET.Element | None) -> dict:
             if first_heading_index is None:
                 first_heading_index = index
 
-    last_paragraph_index = len(paragraphs) - 1 if paragraphs else None
+    last_paragraph_index: int | None = None
+    for index in range(len(paragraphs) - 1, -1, -1):
+        paragraph = paragraphs[index]
+        has_section_properties = paragraph.find("w:pPr/w:sectPr", WORD_NAMESPACE) is not None
+        if has_section_properties:
+            continue
+        if paragraph_text(paragraph).strip() or paragraph.findall(".//w:drawing", WORD_NAMESPACE):
+            last_paragraph_index = index
+            break
+
     replace_candidates: list[dict] = []
     if first_heading_index is not None and last_paragraph_index is not None and first_heading_index <= last_paragraph_index:
         replace_candidates.append(
@@ -204,6 +255,7 @@ def main() -> None:
     payload = {
         "template_file": str(template_file),
         "style_names": extract_style_names(styles_root),
+        "style_catalog": extract_style_catalog(styles_root),
         "has_numbering": numbering_root is not None,
         "has_document_xml": document_root is not None,
         "header_count": len(header_footer["headers"]),

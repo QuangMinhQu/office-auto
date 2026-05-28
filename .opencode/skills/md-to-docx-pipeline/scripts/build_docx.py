@@ -32,10 +32,10 @@ def paragraph_style(block: dict, style_map: dict) -> str:
     if block.get("type") == "heading":
         level = int(block.get("level", 1))
         if level <= 1:
-            return style_map.get("h1", "Heading 1")
+            return style_map.get("h1", "Heading1")
         if level == 2:
-            return style_map.get("h2", "Heading 2")
-        return style_map.get("h3", "Heading 3")
+            return style_map.get("h2", "Heading2")
+        return style_map.get("h3", "Heading3")
     if block.get("type") == "list_item":
         return style_map.get("list", style_map.get("body", "Normal"))
     return style_map.get("body", "Normal")
@@ -45,8 +45,40 @@ def block_text(block: dict) -> str:
     if block.get("type") == "table_row":
         return " | ".join(block.get("cells", []))
     if block.get("type") == "list_item":
+        if block.get("ordered"):
+            return f"{block.get('ordinal', 1)}. {block.get('text', '').strip()}"
         return f"• {block.get('text', '').strip()}"
     return str(block.get("text", "")).strip()
+
+
+def make_run(text_value: str, bold: bool = False, italic: bool = False, code: bool = False) -> ET.Element:
+    run = make_element("r")
+    if bold or italic or code:
+        run_properties = make_element("rPr")
+        if bold:
+            run_properties.append(make_element("b"))
+        if italic:
+            run_properties.append(make_element("i"))
+        if code:
+            run_fonts = make_element("rFonts")
+            run_fonts.set(qname("ascii"), "Courier New")
+            run_fonts.set(qname("hAnsi"), "Courier New")
+            run_properties.append(run_fonts)
+        run.append(run_properties)
+
+    text = make_element("t")
+    text.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    text.text = text_value
+    run.append(text)
+    return run
+
+
+def block_runs(block: dict) -> list[dict]:
+    runs = block.get("runs")
+    if isinstance(runs, list) and runs:
+        return [run for run in runs if str(run.get("text", ""))]
+    fallback = block_text(block)
+    return [] if not fallback else [{"text": fallback}]
 
 
 def make_paragraph(block: dict, style_map: dict) -> ET.Element:
@@ -59,12 +91,23 @@ def make_paragraph(block: dict, style_map: dict) -> ET.Element:
     style_element.set(qname("val"), paragraph_style_name)
     paragraph_properties.append(style_element)
 
-    run = make_element("r")
-    text = make_element("t")
-    text.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-    text.text = block_text(block)
-    run.append(text)
-    paragraph.append(run)
+    if block.get("type") == "list_item" and block.get("level", 0) > 0:
+        indentation = make_element("ind")
+        indentation.set(qname("left"), str(720 * int(block.get("level", 0))))
+        paragraph_properties.append(indentation)
+
+    for run_info in block_runs(block):
+        paragraph.append(
+            make_run(
+                str(run_info.get("text", "")),
+                bold=bool(run_info.get("bold")),
+                italic=bool(run_info.get("italic")),
+                code=bool(run_info.get("code")),
+            )
+        )
+
+    if not list(paragraph.findall(qname("r"))):
+        paragraph.append(make_run(block_text(block)))
     return paragraph
 
 
@@ -194,6 +237,7 @@ def main() -> None:
             "target_file": plan.get("target_file"),
             "replace_range": resolved_range,
             "preserve": plan.get("preserve", []),
+            "style_map": plan.get("style_map", {}),
             "template_header_count": template_profile.get("header_count", 0),
             "template_footer_count": template_profile.get("footer_count", 0),
             **replacement_stats,

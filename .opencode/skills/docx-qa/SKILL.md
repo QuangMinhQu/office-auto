@@ -23,7 +23,7 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 - Các part bắt buộc còn tồn tại nếu template ban đầu có: `word/document.xml`, `word/styles.xml`, `word/numbering.xml` khi áp numbering, header/footer parts.
 
 ### 2. Structural QA
-- Header/footer không bị mất hoặc giảm bất thường.
+- Header/footer không bị mất hoặc giảm bất thường: `header_count_output >= header_count_template` và `footer_count_output >= footer_count_template`.
 - Section break và section settings vẫn còn.
 - Nếu template có TOC thì field TOC vẫn còn.
 - Nếu template có danh mục hình hoặc danh mục bảng thì field tương ứng vẫn còn.

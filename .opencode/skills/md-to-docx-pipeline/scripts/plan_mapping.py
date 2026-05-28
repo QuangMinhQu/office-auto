@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import unicodedata
 from pathlib import Path
 
 
@@ -21,14 +23,56 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(ascii_text.upper().split())
+
+
+def style_score(entry: dict, target_kind: str) -> tuple[int, int, int]:
+    name = normalize_text(entry.get("name") or "")
+    style_id = normalize_text(entry.get("style_id") or "")
+    outline = entry.get("outline_level")
+    qformat = 1 if entry.get("qformat") else 0
+    custom = 1 if entry.get("custom") else 0
+
+    if target_kind == "body":
+        default = 1 if entry.get("default") else 0
+        normal_like = 1 if "NORMAL" in name or "NORMAL" in style_id else 0
+        return (default, normal_like, qformat)
+
+    if target_kind == "list":
+        list_like = 1 if "LIST" in name or "LIST" in style_id else 0
+        numbered_like = 1 if "NUMBER" in name or "DANH SACH" in name else 0
+        return (list_like, numbered_like, qformat)
+
+    level = int(target_kind[1:]) - 1
+    outline_match = 2 if outline is not None and str(outline) == str(level) else 0
+    exact_heading = 1 if re.search(rf"\bHEADING\s*{level + 1}\b", name) else 0
+    exact_style_id = 1 if re.search(rf"\bHEADING\s*{level + 1}\b", style_id) else 0
+    chapter_like = 1 if level == 0 and ("CHUONG" in name or "TIEU DE" in name or "TITLE" in name) else 0
+    return (outline_match + exact_heading + exact_style_id, qformat + custom, chapter_like)
+
+
+def choose_style(style_catalog: list[dict], target_kind: str, fallback: str) -> str:
+    paragraph_styles = [entry for entry in style_catalog if entry.get("style_id")]
+    if not paragraph_styles:
+        return fallback
+    ranked = sorted(paragraph_styles, key=lambda entry: style_score(entry, target_kind), reverse=True)
+    best = ranked[0]
+    if max(style_score(best, target_kind)) <= 0:
+        return fallback
+    return best["style_id"]
+
+
 def infer_style_map(profile: dict) -> dict:
-    style_names = {name.lower(): name for name in profile.get("style_names", [])}
+    style_catalog = profile.get("style_catalog", [])
     return {
-        "h1": style_names.get("heading 1") or style_names.get("heading1") or "Heading 1",
-        "h2": style_names.get("heading 2") or style_names.get("heading2") or "Heading 2",
-        "h3": style_names.get("heading 3") or style_names.get("heading3") or "Heading 3",
-        "body": style_names.get("normal") or "Normal",
-        "list": style_names.get("list paragraph") or style_names.get("listparagraph") or style_names.get("normal") or "Normal",
+        "h1": choose_style(style_catalog, "h1", "Heading1"),
+        "h2": choose_style(style_catalog, "h2", "Heading2"),
+        "h3": choose_style(style_catalog, "h3", "Heading3"),
+        "body": choose_style(style_catalog, "body", "Normal"),
+        "list": choose_style(style_catalog, "list", choose_style(style_catalog, "body", "Normal")),
     }
 
 
@@ -73,6 +117,11 @@ def main() -> None:
         ],
         "execution_strategy": "replace-body-range-in-document-xml",
         "status": "ready-for-execution" if normalized_mode == "preserve-template-scaffold" and replace_ranges_resolved else "blocked",
+        "error_contract": {
+            "blocked_means_do_not_build": True,
+            "builder_must_write_blocked_report": True,
+            "qa_must_fail_if_build_runs_without_resolved_range": True,
+        },
         "steps": [
             "Đọc content_ast.json",
             "Áp style_map cho heading và body",

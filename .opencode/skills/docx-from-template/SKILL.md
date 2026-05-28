@@ -70,6 +70,7 @@ Khi cần delivery gate cho TOC, references, appendix, cross-reference, header/f
 - Không đọc tràn lan full Markdown hoặc dump full DOCX XML vào context khi artifact JSON là đủ.
 - Không được coi `body` là toàn bộ tài liệu. Với DOCX, scaffold ngoài vùng nội dung chính là phần của output bắt buộc phải giữ.
 - Không được dùng chiến lược `clear whole body` trừ khi mode là `full-regenerate-from-schema` và người dùng đã chấp nhận rõ ràng.
+- Với `preserve-template-scaffold`, ưu tiên pipeline artifact trong `md-to-docx-pipeline`; không được chạy OfficeCLI ad-hoc để bypass `plan.json`, `build_report.json` và `qa_report.json`.
 
 ## Invariant quan trọng cho append
 Nếu `mode=append-structured-section` và `target_file` chưa tồn tại, phải sao chép `template_file` sang `target_file` trước khi chèn nội dung mới.
