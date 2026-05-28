@@ -1,0 +1,76 @@
+{
+  "success": true,
+  "data": {
+    "matches": 1,
+    "results": [
+      {
+        "path": "/body/p[@paraId=7FA7A178]",
+        "type": "paragraph",
+        "text": "TÀI LIỆU THAM KHẢO",
+        "preview": "TÀI LIỆU THAM KHẢO",
+        "style": "heading 1",
+        "childCount": 1,
+        "format": {
+          "paraId": "7FA7A178",
+          "style": "Heading1",
+          "styleId": "Heading1",
+          "styleName": "heading 1",
+          "numId": "0",
+          "ilvl": "0",
+          "effective.size": "14pt",
+          "effective.size.src": "/styles/Normal",
+          "effective.font.ascii": "Times New Roman",
+          "effective.font.ascii.src": "/docDefaults",
+          "effective.font.eastAsia": "Times New Roman",
+          "effective.font.eastAsia.src": "/docDefaults",
+          "effective.font.hAnsi": "Times New Roman",
+          "effective.font.hAnsi.src": "/docDefaults",
+          "effective.font.cs": "Times New Roman",
+          "effective.font.cs.src": "/docDefaults",
+          "effective.bold": true,
+          "effective.bold.src": "/styles/Heading1",
+          "effective.alignment": "center",
+          "effective.alignment.src": "/styles/Heading1",
+          "effective.spaceBefore": "6pt",
+          "effective.spaceBefore.src": "/styles/Heading1",
+          "effective.lineSpacing": "1.5x",
+          "effective.lineSpacing.src": "/styles/Heading1"
+        },
+        "children": [
+          {
+            "path": "/body/p[@paraId=7FA7A178]/bookmark[1]",
+            "type": "bookmark",
+            "text": "TÀI LIỆU THAM KHẢO",
+            "childCount": 0,
+            "format": {
+              "name": "_Toc229985286",
+              "id": "10"
+            },
+            "children": []
+          },
+          {
+            "path": "/body/p[@paraId=7FA7A178]/r[1]",
+            "type": "run",
+            "text": "TÀI LIỆU THAM KHẢO",
+            "childCount": 0,
+            "format": {
+              "effective.size": "14pt",
+              "effective.size.src": "/styles/Normal",
+              "effective.font.ascii": "Times New Roman",
+              "effective.font.ascii.src": "/docDefaults",
+              "effective.font.eastAsia": "Times New Roman",
+              "effective.font.eastAsia.src": "/docDefaults",
+              "effective.font.hAnsi": "Times New Roman",
+              "effective.font.hAnsi.src": "/docDefaults",
+              "effective.font.cs": "Times New Roman",
+              "effective.font.cs.src": "/docDefaults",
+              "effective.bold": true,
+              "effective.bold.src": "/styles/Heading1"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

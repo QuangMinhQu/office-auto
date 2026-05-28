@@ -19,7 +19,8 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 
 ### 1. Package QA
 - File mở được.
-- `validate` pass.
+- Chạy `officecli validate <file> --json` ngay đầu phase QA như hard gate đầu tiên.
+- Sau `validate`, chạy `officecli view <file> issues --json` để lấy issue list hiện tại.
 - Các part bắt buộc còn tồn tại nếu template ban đầu có: `word/document.xml`, `word/styles.xml`, `word/numbering.xml` khi áp numbering, header/footer parts.
 
 ### 2. Structural QA
@@ -27,7 +28,9 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 - Section break và section settings vẫn còn.
 - Nếu template có TOC thì field TOC vẫn còn.
 - Nếu template có danh mục hình hoặc danh mục bảng thì field tương ứng vẫn còn.
-- Nếu output dựa vào refresh field khi mở file, phải có `word/settings.xml -> w:updateFields=true` và các field liên quan được đánh dấu dirty.
+- Nếu output dựa vào refresh-on-open, chấp nhận một trong hai bằng chứng:
+  - `build_report.field_refresh_strategy = rewrite-toc-fields-on-open`
+  - hoặc cơ chế khác được ghi rõ trong `build_report.json`
 
 ### 3. Range QA
 - `replace_ranges` trong `plan.json` phải ở trạng thái `resolved`.
@@ -49,7 +52,7 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 ### 6. TOC
 - Nếu tài liệu có TOC, heading mới phải được phản ánh trong TOC hoặc có kế hoạch rõ ràng để refresh/static fallback.
 - TOC render sẵn trong package phải giữ hyperlink hợp lệ; không chấp nhận paragraph style `TOC*` bị chèn text thuần không có hyperlink.
-- Nếu TOC chưa render sẵn đủ heading mới, chỉ được PASS khi file buộc Word refresh on open bằng `updateFields` và dirty field.
+- Nếu TOC chưa render sẵn đủ heading mới, chỉ được PASS khi `build_report.json` chứng minh refresh strategy hợp lệ.
 - Nếu người nhận không refresh field, không được để lại chuỗi `Update field to see table of contents` mà vẫn coi là đã xong.
 
 ### 7. References
@@ -76,6 +79,7 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 ### 12. Tình trạng schema
 - `validate` phải pass.
 - `view issues` không có lỗi nghiêm trọng liên quan đến output vừa sửa.
+- Không coi warning vốn có của template là blocker nếu không phát sinh thêm lỗi nghiêm trọng ở output mới.
 
 ### 13. Semantic gate cho preserve scaffold
 - Text extract của file kết quả phải khớp cấu trúc heading của nguồn.

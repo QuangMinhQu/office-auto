@@ -1,0 +1,13 @@
+Description:
+  Recalculate derived field values (TOC page numbers, PAGE/NUMPAGES, cross-references). Word + Windows required for .docx.
+
+Usage:
+  officecli refresh <file> [options]
+
+Arguments:
+  <file>  Office document path
+
+Options:
+  --json          Output as JSON (AI-friendly)
+  -?, -h, --help  Show help and usage information
+

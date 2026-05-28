@@ -49,7 +49,8 @@ def style_score(entry: dict, target_kind: str) -> tuple[int, int, int]:
     if target_kind == "reference":
         reference_like = 1 if any(token in name or token in style_id for token in ["REFERENCE", "BIBLIOGRAPHY", "TAILIEUTHAMKHAO", "TAI LIEU THAM KHAO"]) else 0
         numbered_like = 1 if entry.get("num_id") not in (None, "", "0") else 0
-        return (reference_like + numbered_like, qformat + custom, 0)
+        list_like = 1 if "LIST PARAGRAPH" in name or "LIST PARAGRAPH" in style_id else 0
+        return (reference_like * 10 + numbered_like * 6 + list_like * 4, qformat + custom, 0)
 
     level = int(target_kind[1:]) - 1
     outline_match = 2 if outline is not None and str(outline) == str(level) else 0
@@ -72,13 +73,15 @@ def choose_style(style_catalog: list[dict], target_kind: str, fallback: str) -> 
 
 def infer_style_map(profile: dict) -> dict:
     style_catalog = profile.get("style_catalog", [])
+    reference_profile = profile.get("reference_profile", {})
+    reference_style = reference_profile.get("style_id") or choose_style(style_catalog, "reference", choose_style(style_catalog, "body", "Normal"))
     return {
         "h1": choose_style(style_catalog, "h1", "Heading1"),
         "h2": choose_style(style_catalog, "h2", "Heading2"),
         "h3": choose_style(style_catalog, "h3", "Heading3"),
         "body": choose_style(style_catalog, "body", "Normal"),
         "list": choose_style(style_catalog, "list", choose_style(style_catalog, "body", "Normal")),
-        "reference": choose_style(style_catalog, "reference", choose_style(style_catalog, "body", "Normal")),
+        "reference": reference_style,
     }
 
 
@@ -120,8 +123,9 @@ def main() -> None:
             "section-breaks-preserved",
             "heading-style-mapped-to-template",
             "no-template-body-residue-inside-replaced-range",
+            "toc-fields-preserved-or-rewritten-for-refresh",
         ],
-        "execution_strategy": "replace-body-range-in-document-xml",
+        "execution_strategy": "officecli-resident-range-replace",
         "status": "ready-for-execution" if normalized_mode == "preserve-template-scaffold" and replace_ranges_resolved else "blocked",
         "error_contract": {
             "blocked_means_do_not_build": True,
@@ -130,9 +134,10 @@ def main() -> None:
         },
         "steps": [
             "Đọc content_ast.json",
-            "Áp style_map cho heading và body",
+            "Áp style_map cho heading và body qua OfficeCLI add/set",
             "Giữ header/footer, page setup và các field cấu trúc từ template khi phù hợp",
-            "Chỉ thay bounded range đã resolve",
+            "Mở resident mode, remove bounded range đã resolve rồi add paragraph/run mới tuần tự",
+            "Rewrite các TOC field hiện có để Word refresh khi mở file",
             "Đánh dấu TOC, danh mục hình/bảng và references cần QA sau build"
         ],
         "blocking_reasons": [] if replace_ranges_resolved or normalized_mode != "preserve-template-scaffold" else [

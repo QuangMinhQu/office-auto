@@ -15,7 +15,7 @@ Pipeline file-state nằm ở `md-to-docx-pipeline`.
 ## Khi nào cần load
 - Khi cần lệnh `officecli` cụ thể.
 - Khi chưa chắc `prop`, `type`, `path`, `field`, `numId`, `ilvl` hoặc schema element.
-- Khi cần quy tắc resident mode, batch mode, hoặc cách kiểm tra field/TOC/footer bằng OfficeCLI.
+- Khi cần quy tắc resident mode, batch mode, live preview, hoặc cách kiểm tra field/TOC/footer bằng OfficeCLI.
 
 ## Khi nào không cần load
 - Chỉ để quyết định mode `rebuild`, `append`, `fill-template`, `hybrid`.
@@ -28,11 +28,16 @@ Pipeline file-state nằm ở `md-to-docx-pipeline`.
 Khi không chắc cú pháp, phải hỏi help trước khi đoán:
 
 ```bash
+officecli --version
 officecli help docx
 officecli help docx <element>
 officecli help docx <verb> <element>
 officecli help docx <element> --json
 ```
+
+Với mutation, đây là hard rule:
+- Trước mỗi `officecli add` hoặc `officecli set`, nếu chưa chắc schema, phải chạy `officecli help docx <element> --json`.
+- Nếu agent đã có OfficeCLI MCP server, ưu tiên MCP tool calls tương đương thay vì shell.
 
 ### 2. Kỷ luật shell
 - Luôn quote đường dẫn semantic path như `"/body/p[1]"`.
@@ -41,8 +46,10 @@ officecli help docx <element> --json
 
 ### 3. Kỷ luật thực thi
 - Mở file bằng `officecli open` và đóng bằng `officecli close` trong cùng terminal.
+- Với multi-step mutation lớn, ưu tiên resident mode hoặc một `batch` JSON array duy nhất, không xen kẽ nhiều open/close rời rạc.
 - Sau thao tác cấu trúc, kiểm tra lại bằng `get` hoặc `view` trước khi chồng thêm lệnh.
 - Không dump toàn bộ document vào context nếu chỉ cần outline hoặc một nhánh nhỏ.
+- Sau `close`, kiểm tra lại bằng `view stats` hoặc `validate`.
 
 ## Thứ tự tra cứu
 1. Đọc skill này để biết nên tra cứu nhóm nào.
@@ -56,6 +63,7 @@ officecli help docx <element> --json
 - `references/fields-toc-refs.md`: TOC, field, references, cross-reference.
 - `references/page-header-footer.md`: section, page setup, header/footer, page number.
 - `references/batch-resident.md`: resident mode, batch mode, execution discipline.
+- `references/raw-l3.md`: `raw`, `raw-set`, `add-part`, guardrail L3.
 
 ## Boundary
 Nếu task chủ yếu là parse Markdown, profile template, mapping hoặc build qua artifact JSON, hãy quay lại `md-to-docx-pipeline` thay vì nhồi thêm command detail vào prompt.

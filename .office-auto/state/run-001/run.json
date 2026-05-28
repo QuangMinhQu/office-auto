@@ -6,6 +6,7 @@
   "target_file": "report.docx",
   "preserve": [
     "headers-footers",
+    "list-of-figures",
     "page-setup",
     "section-breaks",
     "styles-and-numbering",
@@ -15,8 +16,28 @@
     {
       "name": "after-front-matter-to-end-of-main-story",
       "status": "resolved",
-      "paragraph_start_index": 42,
-      "paragraph_end_index": 56,
+      "paragraph_start_index": 64,
+      "paragraph_end_index": 78,
+      "body_start_path": "/body/p[@paraId=04C2E2D0]",
+      "body_end_path": "/body/p[@paraId=3F0FE4AF]",
+      "remove_paths": [
+        "/body/p[@paraId=04C2E2D0]",
+        "/body/p[@paraId=47DD4FDA]",
+        "/body/p[@paraId=051169A1]",
+        "/body/p[@paraId=05E2D782]",
+        "/body/p[@paraId=3B91656F]",
+        "/body/p[@paraId=4A77C03D]",
+        "/body/p[@paraId=114C20C7]",
+        "/body/p[@paraId=450E8917]",
+        "/body/p[@paraId=15D7D3CD]",
+        "/body/p[@paraId=4C9C80FE]",
+        "/body/p[@paraId=409677A3]",
+        "/body/p[@paraId=37D21BE6]",
+        "/body/p[@paraId=7AFAB967]",
+        "/body/p[@paraId=7FA7A178]",
+        "/body/p[@paraId=3F0FE4AF]"
+      ],
+      "insert_after_path": "/body/p[@paraId=49349C0D]",
       "preserves_front_matter": true
     }
   ],
@@ -28,5 +49,5 @@
     "build_report": ".office-auto/state/run-001/build_report.json",
     "qa_report": ".office-auto/state/run-001/qa_report.json"
   },
-  "status": "needs-repair"
+  "status": "ready"
 }

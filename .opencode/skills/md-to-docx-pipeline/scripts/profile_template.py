@@ -1,260 +1,297 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
-import unicodedata
-import zipfile
+from collections import Counter
 from pathlib import Path
-from xml.etree import ElementTree as ET
+
+from officecli_native import (
+    ensure_officecli_available,
+    is_truthy,
+    normalize_text,
+    officecli_get,
+    officecli_query,
+    officecli_view,
+    to_int,
+    write_json,
+)
 
 
-WORD_NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-
-
-def read_xml_from_docx(docx_path: Path, member: str) -> ET.Element | None:
-    with zipfile.ZipFile(docx_path) as archive:
-        if member not in archive.namelist():
-            return None
-        with archive.open(member) as handle:
-            return ET.fromstring(handle.read())
-
-
-def extract_style_names(styles_root: ET.Element | None) -> list[str]:
-    if styles_root is None:
-        return []
-    names: list[str] = []
-    for style in styles_root.findall("w:style", WORD_NAMESPACE):
-        name = style.find("w:name", WORD_NAMESPACE)
-        if name is not None:
-            value = name.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val")
-            if value:
-                names.append(value)
-    return sorted(set(names))
-
-
-def extract_style_catalog(styles_root: ET.Element | None) -> list[dict]:
-    if styles_root is None:
-        return []
-
-    catalog: list[dict] = []
-    for style in styles_root.findall("w:style", WORD_NAMESPACE):
-        style_type = style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}type")
-        style_id = style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}styleId")
-        if style_type != "paragraph" or not style_id:
-            continue
-
-        name_node = style.find("w:name", WORD_NAMESPACE)
-        outline_node = style.find("w:pPr/w:outlineLvl", WORD_NAMESPACE)
-        based_on_node = style.find("w:basedOn", WORD_NAMESPACE)
-        num_id_node = style.find("w:pPr/w:numPr/w:numId", WORD_NAMESPACE)
-        ilvl_node = style.find("w:pPr/w:numPr/w:ilvl", WORD_NAMESPACE)
-
-        catalog.append(
-            {
-                "style_id": style_id,
-                "name": None if name_node is None else name_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
-                "default": style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}default") == "1",
-                "custom": style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}customStyle") == "1",
-                "qformat": style.find("w:qFormat", WORD_NAMESPACE) is not None,
-                "outline_level": None if outline_node is None else outline_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
-                "based_on": None if based_on_node is None else based_on_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
-                "num_id": None if num_id_node is None else num_id_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
-                "ilvl": None if ilvl_node is None else ilvl_node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val"),
-            }
-        )
-
-    return catalog
-
-
-def extract_style_numbering(style_catalog: list[dict]) -> dict:
-    lookup = {entry.get("style_id"): entry for entry in style_catalog if entry.get("style_id")}
-
-    def resolve(style_id: str | None, seen: set[str]) -> dict | None:
-        if not style_id or style_id in seen:
-            return None
-        entry = lookup.get(style_id)
-        if entry is None:
-            return None
-
-        num_id = entry.get("num_id")
-        ilvl = entry.get("ilvl")
-        if num_id not in (None, "", "0"):
-            return {"numId": int(num_id), "ilvl": 0 if ilvl in (None, "") else int(ilvl)}
-
-        return resolve(entry.get("based_on"), seen | {style_id})
-
-    style_numbering: dict = {}
-    for style_id in lookup:
-        numbering = resolve(style_id, set())
-        if numbering is not None:
-            style_numbering[style_id] = numbering
-    return style_numbering
-
-
-def detect_header_footer_members(docx_path: Path) -> dict:
-    with zipfile.ZipFile(docx_path) as archive:
-        members = archive.namelist()
-    headers = [name for name in members if name.startswith("word/header")]
-    footers = [name for name in members if name.startswith("word/footer")]
-    return {"headers": headers, "footers": footers}
-
-
-def normalize_text(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value)
-    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
-    return " ".join(ascii_text.upper().split())
+HEADING_STYLE_PATTERN = re.compile(r"\bHEADING\s*[1-9]\b")
 
 
 def looks_like_heading_style(style: str | None) -> bool:
     if not style:
         return False
     normalized = normalize_text(style)
-    return bool(re.search(r"\bHEADING\s*[1-9]\b", normalized)) or "TIEU DE" in normalized or normalized.startswith("CHUONG")
+    return bool(HEADING_STYLE_PATTERN.search(normalized)) or "TIEU DE" in normalized or normalized.startswith("CHUONG")
 
 
-def extract_field_codes(document_root: ET.Element | None) -> list[str]:
-    if document_root is None:
-        return []
-
-    field_codes: list[str] = []
-    for field in document_root.findall(".//w:fldSimple", WORD_NAMESPACE):
-        instruction = field.attrib.get(f"{{{WORD_NAMESPACE['w']}}}instr")
-        if instruction:
-            field_codes.append(instruction)
-
-    for instruction in document_root.findall(".//w:instrText", WORD_NAMESPACE):
-        if instruction.text and instruction.text.strip():
-            field_codes.append(instruction.text.strip())
-
-    return field_codes
-
-
-def paragraph_text(paragraph: ET.Element) -> str:
-    texts = [node.text or "" for node in paragraph.findall(".//w:t", WORD_NAMESPACE)]
-    return "".join(texts).strip()
-
-
-def paragraph_style(paragraph: ET.Element) -> str | None:
-    style = paragraph.find("w:pPr/w:pStyle", WORD_NAMESPACE)
-    if style is None:
-        return None
-    return style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val")
-
-
-def field_char_type(node: ET.Element) -> str | None:
-    return node.attrib.get(f"{{{WORD_NAMESPACE['w']}}}fldCharType")
-
-
-def paragraph_instr_text(paragraph: ET.Element) -> str:
-    return " ".join((node.text or "") for node in paragraph.findall(".//w:instrText", WORD_NAMESPACE)).strip()
-
-
-def find_toc_paragraph_indices(paragraphs: list[ET.Element]) -> set[int]:
-    toc_indices: set[int] = set()
-    pending_field_start: int | None = None
-    in_toc = False
-
-    for index, paragraph in enumerate(paragraphs):
-        style_id = paragraph_style(paragraph)
-        field_types = [field_char_type(node) for node in paragraph.findall(".//w:fldChar", WORD_NAMESPACE)]
-        instr_text = normalize_text(paragraph_instr_text(paragraph))
-        has_toc_instruction = " TOC " in f" {instr_text} " or instr_text.startswith("TOC")
-        toc_style = normalize_text(style_id or "").startswith("TOC")
-
-        if "begin" in field_types and pending_field_start is None:
-            pending_field_start = index
-
-        if has_toc_instruction or toc_style:
-            in_toc = True
-            if pending_field_start is None:
-                pending_field_start = index
-
-        if in_toc and pending_field_start is not None:
-            for paragraph_index in range(pending_field_start, index + 1):
-                toc_indices.add(paragraph_index)
-
-        if "end" in field_types and in_toc:
-            in_toc = False
-            pending_field_start = None
-        elif "end" in field_types and pending_field_start is not None:
-            pending_field_start = None
-
-    return toc_indices
-
-
-def classify_body(document_root: ET.Element | None) -> dict:
-    if document_root is None:
-        return {
-            "paragraph_count": 0,
-            "section_count": 0,
-            "headings": [],
-            "anchor_candidates": [],
-            "replace_range_candidates": [],
-            "body_regions": {},
-            "preview": [],
-        }
-
-    body = document_root.find("w:body", WORD_NAMESPACE)
-    if body is None:
-        return {
-            "paragraph_count": 0,
-            "section_count": 0,
-            "headings": [],
-            "anchor_candidates": [],
-            "replace_range_candidates": [],
-            "body_regions": {},
-            "preview": [],
-        }
-
-    paragraphs = body.findall("w:p", WORD_NAMESPACE)
-    toc_paragraph_indices = find_toc_paragraph_indices(paragraphs)
-    headings: list[dict] = []
-    anchor_candidates: list[dict] = []
-    preview: list[dict] = []
-    first_heading_index: int | None = None
-
-    for index, paragraph in enumerate(paragraphs):
-        text = paragraph_text(paragraph)
-        style = paragraph_style(paragraph)
-        normalized = normalize_text(text)
-        is_heading = looks_like_heading_style(style) or normalized.startswith("CHUONG ")
-
-        if text and len(preview) < 12:
-            preview.append({"paragraph_index": index, "style": style, "text": text[:160]})
-
-        if is_heading and text:
-            entry = {"paragraph_index": index, "style": style, "text": text}
-            headings.append(entry)
-            anchor_candidates.append(entry)
-            if first_heading_index is None and index not in toc_paragraph_indices:
-                first_heading_index = index
-
-    if first_heading_index is None and headings:
-        first_heading_index = headings[0]["paragraph_index"]
-
-    if toc_paragraph_indices and first_heading_index is not None and first_heading_index <= max(toc_paragraph_indices):
-        first_heading_index = max(toc_paragraph_indices) + 1
-
-    last_paragraph_index: int | None = None
-    for index in range(len(paragraphs) - 1, -1, -1):
-        paragraph = paragraphs[index]
-        has_section_properties = paragraph.find("w:pPr/w:sectPr", WORD_NAMESPACE) is not None
-        if has_section_properties:
+def paragraph_bookmarks(result: dict) -> list[dict]:
+    bookmarks: list[dict] = []
+    for child in result.get("children", []):
+        if child.get("type") != "bookmark":
             continue
-        if paragraph_text(paragraph).strip() or paragraph.findall(".//w:drawing", WORD_NAMESPACE):
-            last_paragraph_index = index
+        bookmark_format = child.get("format", {})
+        name = bookmark_format.get("name")
+        bookmark_id = bookmark_format.get("id")
+        if not name or bookmark_id in (None, ""):
+            continue
+        bookmarks.append({"name": name, "id": str(bookmark_id)})
+    return bookmarks
+
+
+def build_body_paragraphs(results: list[dict]) -> list[dict]:
+    body_results = [result for result in results if str(result.get("path", "")).startswith("/body/")]
+    paragraphs: list[dict] = []
+    for index, result in enumerate(body_results):
+        result_format = result.get("format", {})
+        text = str(result.get("text") or "").strip()
+        style_id = result_format.get("styleId") or result_format.get("style")
+        style_name = result_format.get("styleName") or result.get("style") or style_id
+        paragraphs.append(
+            {
+                "paragraph_index": index,
+                "path": result.get("path"),
+                "text": text,
+                "style": style_name,
+                "style_id": style_id,
+                "num_id": result_format.get("numId"),
+                "ilvl": result_format.get("ilvl"),
+                "bookmarks": paragraph_bookmarks(result),
+                "format": result_format,
+            }
+        )
+    return paragraphs
+
+
+def extract_reference_profile(body_paragraphs: list[dict]) -> dict:
+    reference_heading_index: int | None = None
+
+    for paragraph in body_paragraphs:
+        text = str(paragraph.get("text") or "").strip()
+        if not text:
+            continue
+        if normalize_text(text) != "TAI LIEU THAM KHAO":
+            continue
+        if not looks_like_heading_style(paragraph.get("style") or paragraph.get("style_id")):
+            continue
+        reference_heading_index = int(paragraph["paragraph_index"])
+        break
+
+    if reference_heading_index is None:
+        return {}
+
+    for paragraph in body_paragraphs:
+        paragraph_index = int(paragraph["paragraph_index"])
+        if paragraph_index <= reference_heading_index:
+            continue
+
+        text = str(paragraph.get("text") or "").strip()
+        if not text:
+            continue
+        if looks_like_heading_style(paragraph.get("style") or paragraph.get("style_id")):
             break
 
+        paragraph_format = paragraph.get("format", {})
+        return {
+            "path": paragraph.get("path"),
+            "style_id": paragraph.get("style_id"),
+            "style_name": paragraph.get("style"),
+            "num_id": to_int(paragraph_format.get("numId")),
+            "ilvl": to_int(paragraph_format.get("ilvl")),
+            "list_style": paragraph_format.get("listStyle"),
+            "align": paragraph_format.get("align") or paragraph_format.get("effective.alignment"),
+            "space_before": paragraph_format.get("spaceBefore") or paragraph_format.get("effective.spaceBefore"),
+            "space_after": paragraph_format.get("spaceAfter") or paragraph_format.get("effective.spaceAfter"),
+            "line_spacing": paragraph_format.get("lineSpacing") or paragraph_format.get("effective.lineSpacing"),
+            "line_rule": paragraph_format.get("lineRule") or paragraph_format.get("effective.lineRule"),
+            "hanging_indent": paragraph_format.get("hangingIndent"),
+            "size": paragraph_format.get("size") or paragraph_format.get("effective.size") or paragraph_format.get("size.cs"),
+            "font_ascii": paragraph_format.get("font.ascii") or paragraph_format.get("effective.font.ascii"),
+        }
+
+    return {}
+
+
+def extract_style_numbering(body_paragraphs: list[dict]) -> dict:
+    candidates: dict[str, Counter[tuple[int, int]]] = {}
+
+    for paragraph in body_paragraphs:
+        style_id = paragraph.get("style_id")
+        num_id = to_int(paragraph.get("num_id"))
+        ilvl = to_int(paragraph.get("ilvl"))
+        if not style_id or num_id in (None, 0):
+            continue
+        candidates.setdefault(str(style_id), Counter())[(int(num_id), 0 if ilvl is None else int(ilvl))] += 1
+
+    numbering: dict = {}
+    for style_id, counter in candidates.items():
+        (num_id, ilvl), _ = counter.most_common(1)[0]
+        numbering[style_id] = {"numId": num_id, "ilvl": ilvl}
+    return numbering
+
+
+def infer_outline_level(style_id: str | None, style_name: str | None) -> str | None:
+    normalized = normalize_text(f"{style_id or ''} {style_name or ''}")
+    match = re.search(r"HEADING\s*([1-9])", normalized)
+    if match is None:
+        return None
+    return str(int(match.group(1)) - 1)
+
+
+def extract_style_catalog(style_results: list[dict], style_numbering: dict) -> list[dict]:
+    catalog: list[dict] = []
+
+    for result in style_results:
+        if result.get("type") != "style":
+            continue
+
+        style_format = result.get("format", {})
+        style_id = style_format.get("id")
+        if not style_id or style_format.get("type") != "paragraph":
+            continue
+
+        name = style_format.get("name") or result.get("text")
+        numbering = style_numbering.get(style_id, {})
+        catalog.append(
+            {
+                "style_id": style_id,
+                "name": name,
+                "default": style_id == "Normal",
+                "custom": is_truthy(style_format.get("customStyle")),
+                "qformat": style_id == "Normal" or looks_like_heading_style(name) or normalize_text(name or "").startswith("LIST"),
+                "outline_level": infer_outline_level(style_id, name),
+                "based_on": style_format.get("basedOn"),
+                "num_id": None if not numbering else numbering.get("numId"),
+                "ilvl": None if not numbering else numbering.get("ilvl"),
+            }
+        )
+
+    return catalog
+
+
+def extract_field_codes(field_results: list[dict], toc_results: list[dict]) -> list[str]:
+    codes: list[str] = []
+
+    for result in toc_results:
+        instruction = str(result.get("text") or "").strip()
+        if instruction:
+            codes.append(instruction)
+
+    for result in field_results:
+        instruction = str(result.get("format", {}).get("instruction") or "").strip()
+        if instruction:
+            codes.append(instruction)
+
+    return codes
+
+
+def classify_body(body_elements: list[dict], body_paragraphs: list[dict], section_count: int) -> dict:
+    if not body_paragraphs:
+        return {
+            "paragraph_count": 0,
+            "section_count": section_count,
+            "body_section_count": section_count,
+            "headings": [],
+            "anchor_candidates": [],
+            "replace_range_candidates": [],
+            "body_regions": {},
+            "toc_paragraph_indices": [],
+            "preview": [],
+        }
+
+    headings: list[dict] = []
+    preview: list[dict] = []
+    toc_paragraph_indices: list[int] = []
+
+    for paragraph in body_paragraphs:
+        text = str(paragraph.get("text") or "").strip()
+        style = paragraph.get("style")
+        style_id = paragraph.get("style_id")
+        normalized_style = normalize_text(style or style_id or "")
+        normalized_text = normalize_text(text)
+
+        if text and len(preview) < 12:
+            preview.append({"paragraph_index": paragraph["paragraph_index"], "style": style or style_id, "text": text[:160]})
+
+        if normalized_style.startswith("TOC"):
+            toc_paragraph_indices.append(paragraph["paragraph_index"])
+
+        is_heading = looks_like_heading_style(style or style_id) or normalized_text.startswith("CHUONG ")
+        if not is_heading or not text:
+            continue
+
+        headings.append(
+            {
+                "paragraph_index": paragraph["paragraph_index"],
+                "path": paragraph.get("path"),
+                "style": style or style_id,
+                "style_id": style_id,
+                "text": text,
+                "bookmarks": paragraph.get("bookmarks", []),
+            }
+        )
+
+    toc_end_index = max(toc_paragraph_indices) if toc_paragraph_indices else None
+    first_heading = next(
+        (
+            heading
+            for heading in headings
+            if toc_end_index is None or int(heading["paragraph_index"]) > int(toc_end_index)
+        ),
+        None,
+    )
+
+    start_element_index: int | None = None
+    last_content_element_index: int | None = None
+    if first_heading is not None:
+        heading_path = first_heading.get("path")
+        for element_index, element in enumerate(body_elements):
+            if element.get("path") == heading_path:
+                start_element_index = element_index
+                break
+
+    last_content_paragraph_index: int | None = None
+    for paragraph in body_paragraphs:
+        if str(paragraph.get("text") or "").strip():
+            last_content_paragraph_index = int(paragraph["paragraph_index"])
+
+    last_content_element_index = last_content_paragraph_index if last_content_paragraph_index is not None else 0
+
     replace_candidates: list[dict] = []
-    if first_heading_index is not None and last_paragraph_index is not None and first_heading_index <= last_paragraph_index:
+    if first_heading is not None and last_content_element_index is not None:
+        first_idx = int(first_heading["paragraph_index"])
+        last_idx = last_content_element_index
+        remove_paths = [
+            paragraph["path"]
+            for paragraph in body_paragraphs
+            if first_idx <= int(paragraph["paragraph_index"]) <= last_idx
+            and str(paragraph.get("path", "")).startswith("/body/")
+        ]
+        start_path = remove_paths[0] if remove_paths else None
+        end_path = remove_paths[-1] if remove_paths else None
+        start_paragraph_index = first_idx
+        end_paragraph_index = last_idx if end_path else None
+
+        first_heading_idx = int(first_heading["paragraph_index"])
+        insert_after = None
+        if first_heading_idx > 0:
+            for paragraph in body_paragraphs:
+                if int(paragraph["paragraph_index"]) == first_heading_idx - 1:
+                    insert_after = paragraph.get("path")
+                    break
         replace_candidates.append(
             {
                 "name": "after-front-matter-to-end-of-main-story",
                 "status": "resolved",
-                "paragraph_start_index": first_heading_index,
-                "paragraph_end_index": last_paragraph_index,
-                "preserves_front_matter": first_heading_index > 0,
+                "paragraph_start_index": start_paragraph_index,
+                "paragraph_end_index": end_paragraph_index,
+                "body_start_path": start_path,
+                "body_end_path": end_path,
+                "remove_paths": remove_paths,
+                "insert_after_path": insert_after,
+                "preserves_front_matter": first_heading_idx > 0,
             }
         )
     else:
@@ -264,51 +301,48 @@ def classify_body(document_root: ET.Element | None) -> dict:
                 "status": "unresolved",
                 "paragraph_start_index": None,
                 "paragraph_end_index": None,
+                "body_start_path": None,
+                "body_end_path": None,
+                "remove_paths": [],
+                "insert_after_path": None,
                 "preserves_front_matter": False,
             }
         )
 
-    body = document_root.find("w:body", WORD_NAMESPACE)
-    body_sectpr_count = len(body.findall("w:sectPr", WORD_NAMESPACE)) if body is not None else 0
     return {
-        "paragraph_count": len(paragraphs),
-        "section_count": len(document_root.findall(".//w:sectPr", WORD_NAMESPACE)),
-        "body_section_count": body_sectpr_count,
+        "paragraph_count": len(body_paragraphs),
+        "section_count": section_count,
+        "body_section_count": section_count,
         "headings": headings,
-        "anchor_candidates": anchor_candidates,
+        "anchor_candidates": headings,
         "replace_range_candidates": replace_candidates,
         "body_regions": {
-            "front_matter_end_paragraph_index": first_heading_index - 1 if first_heading_index not in (None, 0) else None,
-            "main_content_start_paragraph_index": first_heading_index,
-            "main_content_end_paragraph_index": last_paragraph_index,
-            "toc_end_paragraph_index": max(toc_paragraph_indices) if toc_paragraph_indices else None,
+            "front_matter_end_paragraph_index": None if first_heading is None or first_heading["paragraph_index"] == 0 else first_heading["paragraph_index"] - 1,
+            "main_content_start_paragraph_index": None if first_heading is None else first_heading["paragraph_index"],
+            "main_content_end_element_index": last_content_element_index,
+            "toc_end_paragraph_index": toc_end_index,
         },
-        "toc_paragraph_indices": sorted(toc_paragraph_indices),
+        "toc_paragraph_indices": toc_paragraph_indices,
         "preview": preview,
     }
 
 
-def detect_preserve_parts(field_codes: list[str], header_footer: dict, document_profile: dict) -> list[str]:
+def detect_preserve_parts(field_codes: list[str], header_results: list[dict], footer_results: list[dict], document_profile: dict) -> list[str]:
     preserve = ["styles-and-numbering", "section-breaks"]
-    if header_footer["headers"] or header_footer["footers"]:
+    if header_results or footer_results:
         preserve.append("headers-footers")
 
     normalized_fields = [normalize_text(code) for code in field_codes]
     if any(" TOC " in f" {code} " or code.startswith("TOC") for code in normalized_fields):
         preserve.append("toc")
-    if any("FIGURE" in code for code in normalized_fields):
+    if any('\\C "HINH"' in code or "FIGURE" in code for code in normalized_fields):
         preserve.append("list-of-figures")
-    if any("TABLE" in code for code in normalized_fields):
+    if any('\\C "BANG"' in code or "TABLE" in code for code in normalized_fields):
         preserve.append("list-of-tables")
     if document_profile.get("section_count", 0) > 0:
         preserve.append("page-setup")
 
     return sorted(set(preserve))
-
-
-def write_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def main() -> None:
@@ -320,27 +354,54 @@ def main() -> None:
     template_file = Path(args.template_file)
     run_dir = Path(args.run_dir)
 
-    styles_root = read_xml_from_docx(template_file, "word/styles.xml")
-    numbering_root = read_xml_from_docx(template_file, "word/numbering.xml")
-    document_root = read_xml_from_docx(template_file, "word/document.xml")
-    header_footer = detect_header_footer_members(template_file)
-    field_codes = extract_field_codes(document_root)
-    document_profile = classify_body(document_root)
+    officecli_version = ensure_officecli_available()
+    outline_view = officecli_view(template_file, "outline") or {}
+    stats_view = officecli_view(template_file, "stats") or {}
+    text_view = officecli_view(template_file, "text") or {}
+    styles_tree = officecli_get(template_file, "/styles", depth=2) or {}
+    numbering_tree = officecli_get(template_file, "/numbering", depth=4) or {}
+    section_results = officecli_query(template_file, "section")
+    style_results = officecli_query(template_file, "style")
+    paragraph_results = officecli_query(template_file, "paragraph")
+    header_results = officecli_query(template_file, "header")
+    footer_results = officecli_query(template_file, "footer")
+    toc_results = officecli_query(template_file, "toc")
+    field_results = officecli_query(template_file, "field")
 
-    style_catalog = extract_style_catalog(styles_root)
+    body_elements = [element for element in text_view.get("elements", []) if str(element.get("path", "")).startswith("/body/")]
+    body_paragraphs = build_body_paragraphs(paragraph_results)
+    style_numbering = extract_style_numbering(body_paragraphs)
+    style_catalog = extract_style_catalog(style_results, style_numbering)
+    field_codes = extract_field_codes(field_results, toc_results)
+    document_profile = classify_body(body_elements, body_paragraphs, len(section_results))
+
     payload = {
         "template_file": str(template_file),
-        "style_names": extract_style_names(styles_root),
+        "officecli_version": officecli_version,
+        "outline_snapshot": outline_view,
+        "stats_snapshot": stats_view,
+        "styles_tree": {
+            "path": styles_tree.get("path"),
+            "child_count": styles_tree.get("childCount"),
+            "type": styles_tree.get("type"),
+        },
+        "numbering_tree": {
+            "path": numbering_tree.get("path"),
+            "child_count": numbering_tree.get("childCount"),
+            "type": numbering_tree.get("type"),
+        },
+        "style_names": sorted({entry.get("name") for entry in style_catalog if entry.get("name")}),
         "style_catalog": style_catalog,
-        "style_numbering": extract_style_numbering(style_catalog),
-        "has_numbering": numbering_root is not None,
-        "has_document_xml": document_root is not None,
-        "header_count": len(header_footer["headers"]),
-        "footer_count": len(header_footer["footers"]),
-        "header_members": header_footer["headers"],
-        "footer_members": header_footer["footers"],
+        "style_numbering": style_numbering,
+        "has_numbering": bool(numbering_tree),
+        "has_document_xml": bool(body_elements),
+        "header_count": len(header_results),
+        "footer_count": len(footer_results),
+        "header_members": [result.get("path") for result in header_results],
+        "footer_members": [result.get("path") for result in footer_results],
         "field_codes": field_codes,
-        "preserve_defaults": detect_preserve_parts(field_codes, header_footer, document_profile),
+        "preserve_defaults": detect_preserve_parts(field_codes, header_results, footer_results, document_profile),
+        "reference_profile": extract_reference_profile(body_paragraphs),
         "document_profile": document_profile,
     }
 

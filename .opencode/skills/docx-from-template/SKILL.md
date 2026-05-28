@@ -64,13 +64,16 @@ Khi cần delivery gate cho TOC, references, appendix, cross-reference, header/f
 
 ## Invariants
 - Không bỏ qua thứ tự phase.
+- Nếu execution path cần OfficeCLI, phải kiểm `officecli --version` ngay ở preflight.
 - Không đoán `prop`, `type`, `numId`, `ilvl`; nếu thiếu thì tra `officecli-docx`.
+- Trước mọi `add`/`set` trong phase execute, phải có help/schema check tương ứng hoặc artifact command đã được xác thực sẵn.
 - `style` và `numbering` là hai lớp khác nhau.
 - Mọi mode có thay đổi cấu trúc phải rà TOC, references, appendix, danh mục hình/bảng, cross-reference, header/footer.
 - Không đọc tràn lan full Markdown hoặc dump full DOCX XML vào context khi artifact JSON là đủ.
 - Không được coi `body` là toàn bộ tài liệu. Với DOCX, scaffold ngoài vùng nội dung chính là phần của output bắt buộc phải giữ.
 - Không được dùng chiến lược `clear whole body` trừ khi mode là `full-regenerate-from-schema` và người dùng đã chấp nhận rõ ràng.
 - Với `preserve-template-scaffold`, ưu tiên pipeline artifact trong `md-to-docx-pipeline`; không được chạy OfficeCLI ad-hoc để bypass `plan.json`, `build_report.json` và `qa_report.json`.
+- Nếu OfficeCLI MCP đã sẵn sàng, ưu tiên MCP tool calls cho phase execute thay vì tự gọi shell lẻ.
 
 ## Invariant quan trọng cho append
 Nếu `mode=append-structured-section` và `target_file` chưa tồn tại, phải sao chép `template_file` sang `target_file` trước khi chèn nội dung mới.
@@ -106,6 +109,7 @@ Mục tiêu: xác nhận mode, file vào/ra, môi trường và đường chạy
 Làm:
 - Xác nhận file đầu vào tồn tại.
 - Xác nhận `mode` hợp lệ.
+- Nếu execution path là OfficeCLI native, chạy `officecli --version` và ghi vào `preflight.json`.
 - Nếu `mode=append-to-template`, xác nhận `target_file` và `insert_after`.
 - Nếu `mode=append-to-template` mà `target_file` chưa tồn tại, sao chép `template_file` sang `target_file`.
 - Nếu `mode=rebuild-from-template-format`, xác nhận `source_scope` và output đích.
@@ -137,6 +141,7 @@ Phải lấy:
 Không làm:
 - không đọc toàn bộ file Markdown vào prompt nếu `content_outline.json` là đủ
 - không dump toàn bộ XML hoặc full command output vào context
+- không dùng `raw-set` trước khi chứng minh L1/L2 không hỗ trợ
 
 Artifact tối thiểu:
 ```json
@@ -187,6 +192,7 @@ Mục tiêu: build file đích theo `plan.json`.
 - Giữ document-level settings cần thiết.
 - Chỉ thay bounded range theo `plan.json`.
 - Đánh dấu các phần phụ thuộc cần refresh hoặc rebuild.
+- Với mutation nhiều bước, phải dùng resident mode hoặc batch mode rõ ràng.
 - Không được chỉ thêm block mới vào body cũ nếu task yêu cầu thay nội dung chính.
 - Nếu build engine không chứng minh được range đã resolve hoặc scaffold còn nguyên, phải fail thay vì tiếp tục finalize.
 

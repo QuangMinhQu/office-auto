@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "data": {
+    "matches": 2,
+    "results": [
+      {
+        "path": "/styles/ListParagraph",
+        "type": "style",
+        "text": "List Paragraph",
+        "childCount": 0,
+        "format": {
+          "id": "ListParagraph",
+          "name": "List Paragraph",
+          "type": "paragraph",
+          "basedOn": "Normal",
+          "basedOn.path": "/styles/Normal"
+        },
+        "children": []
+      },
+      {
+        "path": "/styles/ListParagraphChar",
+        "type": "style",
+        "text": "List Paragraph Char",
+        "childCount": 0,
+        "format": {
+          "id": "ListParagraphChar",
+          "name": "List Paragraph Char",
+          "type": "character"
+        },
+        "children": []
+      }
+    ]
+  }
+}

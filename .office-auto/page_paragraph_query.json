@@ -1,0 +1,97 @@
+{
+  "success": true,
+  "data": {
+    "matches": 2,
+    "results": [
+      {
+        "path": "/body/p[@paraId=6F325398]",
+        "type": "paragraph",
+        "text": "Trang",
+        "preview": "Trang",
+        "style": "Normal",
+        "childCount": 1,
+        "format": {
+          "paraId": "6F325398",
+          "align": "right",
+          "widowControl": false,
+          "effective.size": "14pt",
+          "effective.size.src": "/styles/Normal",
+          "effective.font.ascii": "Times New Roman",
+          "effective.font.ascii.src": "/docDefaults",
+          "effective.font.eastAsia": "Times New Roman",
+          "effective.font.eastAsia.src": "/docDefaults",
+          "effective.font.hAnsi": "Times New Roman",
+          "effective.font.hAnsi.src": "/docDefaults",
+          "effective.font.cs": "Times New Roman",
+          "effective.font.cs.src": "/docDefaults"
+        },
+        "children": [
+          {
+            "path": "/body/p[@paraId=6F325398]/r[1]",
+            "type": "run",
+            "text": "Trang",
+            "childCount": 0,
+            "format": {
+              "effective.size": "14pt",
+              "effective.size.src": "/styles/Normal",
+              "effective.font.ascii": "Times New Roman",
+              "effective.font.ascii.src": "/docDefaults",
+              "effective.font.eastAsia": "Times New Roman",
+              "effective.font.eastAsia.src": "/docDefaults",
+              "effective.font.hAnsi": "Times New Roman",
+              "effective.font.hAnsi.src": "/docDefaults",
+              "effective.font.cs": "Times New Roman",
+              "effective.font.cs.src": "/docDefaults"
+            },
+            "children": []
+          }
+        ]
+      },
+      {
+        "path": "/body/p[@paraId=25A8C492]",
+        "type": "paragraph",
+        "text": "Trang",
+        "preview": "Trang",
+        "style": "Normal",
+        "childCount": 1,
+        "format": {
+          "paraId": "25A8C492",
+          "align": "right",
+          "spaceBefore": "6pt",
+          "widowControl": false,
+          "effective.size": "14pt",
+          "effective.size.src": "/styles/Normal",
+          "effective.font.ascii": "Times New Roman",
+          "effective.font.ascii.src": "/docDefaults",
+          "effective.font.eastAsia": "Times New Roman",
+          "effective.font.eastAsia.src": "/docDefaults",
+          "effective.font.hAnsi": "Times New Roman",
+          "effective.font.hAnsi.src": "/docDefaults",
+          "effective.font.cs": "Times New Roman",
+          "effective.font.cs.src": "/docDefaults"
+        },
+        "children": [
+          {
+            "path": "/body/p[@paraId=25A8C492]/r[1]",
+            "type": "run",
+            "text": "Trang",
+            "childCount": 0,
+            "format": {
+              "effective.size": "14pt",
+              "effective.size.src": "/styles/Normal",
+              "effective.font.ascii": "Times New Roman",
+              "effective.font.ascii.src": "/docDefaults",
+              "effective.font.eastAsia": "Times New Roman",
+              "effective.font.eastAsia.src": "/docDefaults",
+              "effective.font.hAnsi": "Times New Roman",
+              "effective.font.hAnsi.src": "/docDefaults",
+              "effective.font.cs": "Times New Roman",
+              "effective.font.cs.src": "/docDefaults"
+            },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

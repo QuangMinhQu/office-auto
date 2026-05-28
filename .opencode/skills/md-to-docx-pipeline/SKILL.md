@@ -27,6 +27,7 @@ Không nên thấy:
 - Cần checkpoint state để resume.
 
 ## Artifacts chuẩn
+- `.office-auto/state/<run_id>/preflight.json`
 - `.office-auto/state/<run_id>/run.json`
 - `.office-auto/state/<run_id>/content_ast.json`
 - `.office-auto/state/<run_id>/content_outline.json`
@@ -34,6 +35,7 @@ Không nên thấy:
 - `.office-auto/state/<run_id>/plan.json`
 - `.office-auto/state/<run_id>/build_report.json`
 - `.office-auto/state/<run_id>/qa_report.json`
+- `.office-auto/state/<run_id>/batch_report.json` khi dùng wrapper batch
 
 ## Trình tự chạy
 1. `scripts/parse_markdown.py`
@@ -51,7 +53,7 @@ Không nên thấy:
 ### `profile_template.py`
 - Input: `--template-file`, `--run-dir`
 - Output: `template_profile.json`
-- Trách nhiệm: phát hiện scaffold, field TOC/danh mục, section count, heading candidate và replace-range candidate.
+- Trách nhiệm: phát hiện scaffold, field TOC/danh mục, section count, heading candidate và replace-range candidate qua OfficeCLI `view/get/query`.
 
 ### `plan_mapping.py`
 - Input: `--mode`, `--run-dir`, `--source-file`, `--template-file`, `--target-file`
@@ -63,18 +65,25 @@ Không nên thấy:
 - Input: `--run-dir`
 - Output: `build_report.json`
 - Trách nhiệm: chỉ chạy bounded replacement; nếu range chưa resolve thì fail-closed.
-- Nếu template có TOC hoặc field dẫn hướng phụ thuộc heading, script phải đánh dấu field là stale/dirty và bật `word/settings.xml -> w:updateFields` để Word refresh khi mở file.
+- Script build mặc định đi theo resident mode OfficeCLI: `open -> remove/add/set -> save -> close`.
+- Nếu template có TOC hoặc field dẫn hướng phụ thuộc heading, script phải giữ field đó và chọn refresh strategy native, ví dụ rewrite TOC field qua L2. Chỉ dùng L3 khi L2 không đủ và phải ghi rõ vào `build_report.json`.
 - Error contract: khi `plan.json.status=blocked`, script phải ghi `build_report.json.status=blocked`, không tạo output giả hoàn tất và phải giữ `run.json.status=blocked`.
+
+### `run_officecli_batch.py`
+- Input: `--target-file`, `--input-json`, `--report-json`
+- Output: `batch_report.json`
+- Trách nhiệm: chạy một JSON array mutation duy nhất qua `officecli batch` khi pipeline cần batch mode thay cho resident mode.
 
 ### `qa_docx.py`
 - Input: `--run-dir`
 - Output: `qa_report.json`
 - Trách nhiệm: kiểm package QA, structural QA, range QA và semantic QA.
 - Threshold tối thiểu: `header_count_output >= header_count_template`, `footer_count_output >= footer_count_template`, và nếu template có TOC hoặc danh mục hình/bảng thì field tương ứng phải còn trong file đích.
-- Nếu TOC đang dựa vào refresh-on-open, QA phải xác nhận `updateFields` đã bật và field liên quan đã được đánh dấu dirty; nếu TOC đã render sẵn trong package thì hyperlink/anchor của các entry phải còn hợp lệ.
+- Nếu TOC đang dựa vào refresh-on-open, QA phải đọc refresh strategy từ `build_report.json`; nếu TOC đã render sẵn trong package thì hyperlink/anchor của các entry phải còn hợp lệ.
 
 ## Quy tắc
 - Mỗi script phải ghi artifact ngắn, có schema ổn định.
 - Mỗi script phải có thể chạy lại mà không làm hỏng run state.
+- Mọi script OfficeCLI native phải dùng `officecli --version` hoặc `preflight.json` làm source-of-truth cho runtime hiện tại.
 - Không được dùng `scaffolded`, `pending-implementation` hoặc trạng thái mơ hồ để ngụy trang thành công khi đường build thật chưa đạt chuẩn.
 - Nếu chưa resolve được range thay nội dung hoặc chưa chứng minh được scaffold preservation, script phải fail rõ ràng.
