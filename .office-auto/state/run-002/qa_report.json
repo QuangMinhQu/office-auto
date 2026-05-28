@@ -1,0 +1,37 @@
+{
+  "run": "run-002",
+  "validation": "passed",
+  "outline_check": {
+    "heading_count": 11,
+    "expected": [
+      "CHƯƠNG 1. CƠ SỞ LÝ THUYẾT",
+      "1.1.",
+      "1.2.",
+      "1.3.",
+      "1.4.",
+      "1.4.1.",
+      "1.4.2.",
+      "CHƯƠNG 2. ỨNG DỤNG VÀ ĐỊNH HƯỚNG PHÁT TRIỂN AI",
+      "2.1.",
+      "2.2.",
+      "TÀI LIỆU THAM KHẢO"
+    ]
+  },
+  "format_check": {
+    "heading1_style": "Heading1",
+    "heading1_alignment": "center",
+    "heading2_style": "Heading2",
+    "heading2_alignment": "justify",
+    "heading3_style": "Heading3",
+    "heading3_alignment": "justify",
+    "numbering": "applied (numId=25 for H1, inherited for H2/H3)",
+    "font": "Times New Roman",
+    "line_spacing": "1.5x",
+    "page_setup": "A4 21cm x 29.7cm",
+    "margins": "top=2.49cm, bottom=2.01cm, left=3.5cm, right=1.5cm",
+    "header": "inherited from template",
+    "footer": "inherited from template"
+  },
+  "issues": [],
+  "status": "passed"
+}

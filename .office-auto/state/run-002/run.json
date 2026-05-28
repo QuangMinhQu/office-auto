@@ -1,0 +1,12 @@
+{
+  "run": "run-002",
+  "phase": 5,
+  "completed": true,
+  "mode": "rebuild-from-template-format",
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "source_file": "/home/minhquang/office-auto/chuong_2.md",
+  "output_file": "report.docx",
+  "final_status": "ready",
+  "issues": []
+}

@@ -1,0 +1,15 @@
+{
+  "mode": "rebuild-from-template-format",
+  "source_file": "chuong_2.md",
+  "template_file": "format_template.docx",
+  "target_file": "report.docx",
+  "artifacts": {
+    "content_ast": "/home/minhquang/office-auto/.office-auto/state/run-001/content_ast.json",
+    "content_outline": "/home/minhquang/office-auto/.office-auto/state/run-001/content_outline.json",
+    "template_profile": "/home/minhquang/office-auto/.office-auto/state/run-001/template_profile.json",
+    "plan": "/home/minhquang/office-auto/.office-auto/state/run-001/plan.json",
+    "build_report": "/home/minhquang/office-auto/.office-auto/state/run-001/build_report.json",
+    "qa_report": "/home/minhquang/office-auto/.office-auto/state/run-001/qa_report.json"
+  },
+  "status": "ready"
+}

@@ -1,0 +1,48 @@
+{
+  "mode_requested": "preserve-template-scaffold",
+  "mode": "preserve-template-scaffold",
+  "source_file": "/home/minhquang/office-auto/2.md",
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "heading_count": 22,
+  "style_map": {
+    "h1": "heading 1",
+    "h2": "heading 2",
+    "h3": "heading 3",
+    "body": "Normal",
+    "list": "List Paragraph"
+  },
+  "has_numbering": true,
+  "preserve": [
+    "headers-footers",
+    "page-setup",
+    "section-breaks",
+    "styles-and-numbering",
+    "toc"
+  ],
+  "replace_ranges": [
+    {
+      "name": "after-front-matter-to-end-of-main-story",
+      "status": "resolved",
+      "paragraph_start_index": 22,
+      "paragraph_end_index": 56,
+      "preserves_front_matter": true
+    }
+  ],
+  "post_conditions": [
+    "headers-footers-preserved",
+    "section-breaks-preserved",
+    "heading-style-mapped-to-template",
+    "no-template-body-residue-inside-replaced-range"
+  ],
+  "execution_strategy": "replace-body-range-in-document-xml",
+  "status": "ready-for-execution",
+  "steps": [
+    "Đọc content_ast.json",
+    "Áp style_map cho heading và body",
+    "Giữ header/footer, page setup và các field cấu trúc từ template khi phù hợp",
+    "Chỉ thay bounded range đã resolve",
+    "Đánh dấu TOC, danh mục hình/bảng và references cần QA sau build"
+  ],
+  "blocking_reasons": []
+}

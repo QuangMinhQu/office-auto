@@ -1,0 +1,17 @@
+{
+  "phase": 3,
+  "completed": true,
+  "working_file": "report.docx",
+  "status": "build-complete",
+  "body_replaced": true,
+  "output_paragraph_count": 63,
+  "output_heading_count": 11,
+  "artifacts": {
+    "content_ast": "/home/minhquang/office-auto/.office-auto/state/run-001/content_ast.json",
+    "content_outline": "/home/minhquang/office-auto/.office-auto/state/run-001/content_outline.json",
+    "template_profile": "/home/minhquang/office-auto/.office-auto/state/run-001/template_profile.json",
+    "plan": "/home/minhquang/office-auto/.office-auto/state/run-001/plan.json",
+    "build_report": "/home/minhquang/office-auto/.office-auto/state/run-001/build_report.json"
+  },
+  "issues": []
+}

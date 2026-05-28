@@ -1,0 +1,14 @@
+{
+  "run": "run-002",
+  "mode": "rebuild-from-template-format",
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "source_file": "/home/minhquang/office-auto/chuong_2.md",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "body_children_before": 60,
+  "body_children_after": 66,
+  "blocks_added": 124,
+  "commands_total": 183,
+  "commands_succeeded": 183,
+  "commands_failed": 0,
+  "status": "completed"
+}

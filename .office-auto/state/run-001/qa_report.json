@@ -1,0 +1,26 @@
+{
+  "phase": 4,
+  "completed": true,
+  "checks": {
+    "outline": true,
+    "numbering": "skipped-auto-numbering-text-has-numbering",
+    "toc": "N/A (rebuild mode)",
+    "references": true,
+    "appendix": "N/A",
+    "lists": "N/A",
+    "cross_references": "N/A",
+    "header_footer": true,
+    "placeholder_leak": true,
+    "validate": true,
+    "semantic": {
+      "body_replaced": true,
+      "duplicate_heading_patterns": [],
+      "residual_template_headings": [],
+      "source_heading_count": 11,
+      "output_heading_count": 11,
+      "tai_lieu_tham_khao_count": 1
+    }
+  },
+  "status": "pass",
+  "issues": []
+}

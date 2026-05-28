@@ -12,53 +12,90 @@ Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
 
 ## Khi nào phải load skill này
 - Trước khi bàn giao file `.docx`.
-- Khi task là `append`.
+- Khi task là `append` hoặc `preserve scaffold`.
 - Khi tài liệu có TOC, references, appendix, danh mục hình/bảng, cross-reference, header/footer hoặc page fields.
 
 ## Checklist QA tối thiểu
 
-### 1. Body structure
+### 1. Package QA
+- File mở được.
+- `validate` pass.
+- Các part bắt buộc còn tồn tại nếu template ban đầu có: `word/document.xml`, `word/styles.xml`, `word/numbering.xml` khi áp numbering, header/footer parts.
+
+### 2. Structural QA
+- Header/footer không bị mất hoặc giảm bất thường.
+- Section break và section settings vẫn còn.
+- Nếu template có TOC thì field TOC vẫn còn.
+- Nếu template có danh mục hình hoặc danh mục bảng thì field tương ứng vẫn còn.
+
+### 3. Range QA
+- `replace_ranges` trong `plan.json` phải ở trạng thái `resolved`.
+- Vùng được phép thay đã thay thật.
+- Vùng phải giữ vẫn còn.
+- Nếu `replace_ranges` không resolve được mà build vẫn chạy, phải fail ngay.
+
+### 4. Body structure
 - `view outline` phải phản ánh đúng heading mới.
 - Không được skip cấp heading.
 - Nếu append, nội dung cũ vẫn còn đầy đủ.
+- Nếu preserve scaffold, nội dung cũ của template không được còn lại trong vùng đã thay.
+- Nếu preserve scaffold, phải có cách chứng minh đây là `replace bounded range` chứ không phải `append body` hoặc `clear whole body`.
 
-### 2. Numbering
+### 5. Numbering
 - Numbered heading phải có `numId` + `ilvl` đúng.
 - `paragraph[numId>0]` phải bao gồm các heading mới nếu template đang đánh số.
 
-### 3. TOC
+### 6. TOC
 - Nếu tài liệu có TOC, heading mới phải được phản ánh trong TOC hoặc có kế hoạch rõ ràng để refresh/static fallback.
 - Nếu người nhận không refresh field, không được để lại chuỗi `Update field to see table of contents` mà vẫn coi là đã xong.
 
-### 4. References
+### 7. References
 - Nếu nội dung mới có citation, section `TÀI LIỆU THAM KHẢO` phải được cập nhật.
 - Không được để section mới sử dụng nguồn mà reference list chưa có.
 
-### 5. Appendix
+### 8. Appendix
 - Nếu nội dung mới tham chiếu phụ lục, phải kiểm tra section phụ lục tồn tại và khớp.
 
-### 6. Các danh mục phụ thuộc nội dung
+### 9. Các danh mục phụ thuộc nội dung
 - Danh mục hình
 - Danh mục bảng
 - Caption/sequence fields
 - Cross-reference/bookmark nội bộ
 
-### 7. Header/Footer/Page fields
+### 10. Header/Footer/Page fields
 - Header/footer không bị ghi đè ngoài ý muốn.
 - PAGE/NUMPAGES fields tồn tại đúng cấu trúc.
 
-### 8. Placeholder leak
+### 11. Placeholder leak
 - Không còn `{{...}}`, `{...}`, `<TODO>`, `xxxx`, `lorem` nếu đó là placeholder.
 
-### 9. Tình trạng schema
+### 12. Tình trạng schema
 - `validate` phải pass.
 - `view issues` không có lỗi nghiêm trọng liên quan đến output vừa sửa.
+
+### 13. Semantic gate cho preserve scaffold
+- Text extract của file kết quả phải khớp cấu trúc heading của nguồn.
+- Không được xuất hiện duplicate heading pattern như:
+  - `CHƯƠNG 1. CHƯƠNG 1`
+  - `CHƯƠNG 2. CHƯƠNG 2`
+  - `4.1. 1.1.`
+  - `5.1. 2.1.`
+- Không được xuất hiện thêm chương hoặc đề mục lớn không tồn tại trong markdown nguồn.
+- Không được có dấu hiệu mất scaffold mà vẫn được coi là “đã đúng nội dung”.
+- Nếu build report có chỉ số kiểu `body_children_before` gần bằng `body_children_after`, phải coi đây là tín hiệu append trá hình và kiểm tra lại ngay.
 
 ## Delivery Gate
 Chỉ PASS khi tất cả đúng:
 ```json
 {
+  "package_ok": true,
+  "required_parts_present": true,
+  "scaffold_preserved": true,
+  "replace_ranges_resolved": true,
   "outline_ok": true,
+  "body_replaced_ok": true,
+  "template_residue": false,
+  "duplicate_heading_patterns": [],
   "numbering_ok": true,
   "toc_ok": true,
   "references_ok": true,
@@ -77,6 +114,11 @@ Nếu bất kỳ trường nào fail:
 
 ## Lưu ý cho Open Models
 Không được tự động coi `validate pass` là đủ.
+Trong task rebuild, lỗi phổ biến nhất là:
+- không xóa body cũ của template
+- chèn heading mới chồng lên numbering cũ
+- để text extract dính liền heading và paragraph do chèn sai block boundary
+- QA chỉ nhìn `validate` nên bỏ lọt semantic regression
 Trong task append, lỗi phổ biến nhất là:
 - mất nội dung cũ
 - TOC chưa cập nhật

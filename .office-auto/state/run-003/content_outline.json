@@ -1,0 +1,116 @@
+{
+  "source_file": "/home/minhquang/office-auto/2.md",
+  "heading_count": 22,
+  "outline": [
+    {
+      "level": 1,
+      "text": "**Giải Pháp Tối Ưu Hóa Ngữ Cảnh Và Thiết Kế Hệ Thống Multi-Agent Cho Tiến Trình Tự Động Hóa Markdown-to-DOCX**",
+      "line": 1
+    },
+    {
+      "level": 2,
+      "text": "**Thực Trạng Tiêu Hao Ngữ Cảnh Và Thách Thức Hệ Thống**",
+      "line": 3
+    },
+    {
+      "level": 2,
+      "text": "**Kiến Trúc Decoupled Qua Giao Thức Model Context Protocol (MCP)**",
+      "line": 9
+    },
+    {
+      "level": 2,
+      "text": "**Phân Tách Nhiệm Vụ Với Mô Hình Phân Lớp Multi-Agent**",
+      "line": 28
+    },
+    {
+      "level": 3,
+      "text": "**1\\. Planner Agent (Tác nhân Quy hoạch)**",
+      "line": 107
+    },
+    {
+      "level": 3,
+      "text": "**2\\. Translator Agent (Tác nhân Dịch giả)**",
+      "line": 112
+    },
+    {
+      "level": 3,
+      "text": "**3\\. Layout Agent (Tác nhân Tạo dựng)**",
+      "line": 117
+    },
+    {
+      "level": 3,
+      "text": "**4\\. Reviewer Agent (Tác nhân Kiểm duyệt)**",
+      "line": 122
+    },
+    {
+      "level": 2,
+      "text": "**Thiết Kế Skill Library Bền Vững: Ứng Dụng Từ Voyager và ADK**",
+      "line": 129
+    },
+    {
+      "level": 3,
+      "text": "**Kiến Trúc Thư Viện Kỹ Năng Tích Lũy**",
+      "line": 133
+    },
+    {
+      "level": 3,
+      "text": "**Các Mẫu Thiết Kế Kỹ Năng ADK Core**",
+      "line": 195
+    },
+    {
+      "level": 2,
+      "text": "**Quy Trình Xử Lý Các Kịch Bản Sử Dụng Thực Tế (Use Cases)**",
+      "line": 244
+    },
+    {
+      "level": 3,
+      "text": "**Kịch Bản A: Chèn Thêm Nội Dung (Append Content) Vào Tệp Mẫu**",
+      "line": 248
+    },
+    {
+      "level": 3,
+      "text": "**Kịch Bản B: Làm Mới Hoàn Toàn Tài Liệu Dựa Trên Định Dạng Của Tệp Mẫu**",
+      "line": 257
+    },
+    {
+      "level": 3,
+      "text": "**Các Lộ Trình Biên Dịch Tài Liệu Markdown-to-DOCX**",
+      "line": 268
+    },
+    {
+      "level": 2,
+      "text": "**Tối Ưu Hóa Ngữ Cảnh Và Đánh Giá Hiệu Năng Thực Nghiệm**",
+      "line": 276
+    },
+    {
+      "level": 3,
+      "text": "**Chỉ Số Tiêu Thụ Token Và Tải Trọng Hệ Thống Attention**",
+      "line": 280
+    },
+    {
+      "level": 3,
+      "text": "**Chỉ Số Độ Trễ Và Chất Lượng Định Dạng Tài Liệu**",
+      "line": 290
+    },
+    {
+      "level": 2,
+      "text": "**Lộ Trình Triển Khai Hệ Thống Trên office-auto**",
+      "line": 300
+    },
+    {
+      "level": 3,
+      "text": "**Giai đoạn 1: Chuẩn Hóa Lớp Thao Tác MCP**",
+      "line": 304
+    },
+    {
+      "level": 3,
+      "text": "**Giai đoạn 2: Đóng Gói Kho Kỹ Năng ADK**",
+      "line": 310
+    },
+    {
+      "level": 3,
+      "text": "**Giai đoạn 3: Kích Hoạt Tiến Trình Multi-Agent**",
+      "line": 316
+    }
+  ]
+}

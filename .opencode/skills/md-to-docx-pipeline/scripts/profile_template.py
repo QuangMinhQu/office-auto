@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import argparse
+import json
+import unicodedata
+import zipfile
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
+
+WORD_NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+
+
+def read_xml_from_docx(docx_path: Path, member: str) -> ET.Element | None:
+    with zipfile.ZipFile(docx_path) as archive:
+        if member not in archive.namelist():
+            return None
+        with archive.open(member) as handle:
+            return ET.fromstring(handle.read())
+
+
+def extract_style_names(styles_root: ET.Element | None) -> list[str]:
+    if styles_root is None:
+        return []
+    names: list[str] = []
+    for style in styles_root.findall("w:style", WORD_NAMESPACE):
+        name = style.find("w:name", WORD_NAMESPACE)
+        if name is not None:
+            value = name.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val")
+            if value:
+                names.append(value)
+    return sorted(set(names))
+
+
+def detect_header_footer_members(docx_path: Path) -> dict:
+    with zipfile.ZipFile(docx_path) as archive:
+        members = archive.namelist()
+    headers = [name for name in members if name.startswith("word/header")]
+    footers = [name for name in members if name.startswith("word/footer")]
+    return {"headers": headers, "footers": footers}
+
+
+def normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    return " ".join(ascii_text.upper().split())
+
+
+def extract_field_codes(document_root: ET.Element | None) -> list[str]:
+    if document_root is None:
+        return []
+
+    field_codes: list[str] = []
+    for field in document_root.findall(".//w:fldSimple", WORD_NAMESPACE):
+        instruction = field.attrib.get(f"{{{WORD_NAMESPACE['w']}}}instr")
+        if instruction:
+            field_codes.append(instruction)
+
+    for instruction in document_root.findall(".//w:instrText", WORD_NAMESPACE):
+        if instruction.text and instruction.text.strip():
+            field_codes.append(instruction.text.strip())
+
+    return field_codes
+
+
+def paragraph_text(paragraph: ET.Element) -> str:
+    texts = [node.text or "" for node in paragraph.findall(".//w:t", WORD_NAMESPACE)]
+    return "".join(texts).strip()
+
+
+def paragraph_style(paragraph: ET.Element) -> str | None:
+    style = paragraph.find("w:pPr/w:pStyle", WORD_NAMESPACE)
+    if style is None:
+        return None
+    return style.attrib.get(f"{{{WORD_NAMESPACE['w']}}}val")
+
+
+def classify_body(document_root: ET.Element | None) -> dict:
+    if document_root is None:
+        return {
+            "paragraph_count": 0,
+            "section_count": 0,
+            "headings": [],
+            "anchor_candidates": [],
+            "replace_range_candidates": [],
+            "body_regions": {},
+            "preview": [],
+        }
+
+    body = document_root.find("w:body", WORD_NAMESPACE)
+    if body is None:
+        return {
+            "paragraph_count": 0,
+            "section_count": 0,
+            "headings": [],
+            "anchor_candidates": [],
+            "replace_range_candidates": [],
+            "body_regions": {},
+            "preview": [],
+        }
+
+    paragraphs = body.findall("w:p", WORD_NAMESPACE)
+    headings: list[dict] = []
+    anchor_candidates: list[dict] = []
+    preview: list[dict] = []
+    first_heading_index: int | None = None
+
+    for index, paragraph in enumerate(paragraphs):
+        text = paragraph_text(paragraph)
+        style = paragraph_style(paragraph)
+        normalized = normalize_text(text)
+        is_heading = bool(style and style.lower().startswith("heading")) or normalized.startswith("CHUONG ")
+
+        if text and len(preview) < 12:
+            preview.append({"paragraph_index": index, "style": style, "text": text[:160]})
+
+        if is_heading and text:
+            entry = {"paragraph_index": index, "style": style, "text": text}
+            headings.append(entry)
+            anchor_candidates.append(entry)
+            if first_heading_index is None:
+                first_heading_index = index
+
+    last_paragraph_index = len(paragraphs) - 1 if paragraphs else None
+    replace_candidates: list[dict] = []
+    if first_heading_index is not None and last_paragraph_index is not None and first_heading_index <= last_paragraph_index:
+        replace_candidates.append(
+            {
+                "name": "after-front-matter-to-end-of-main-story",
+                "status": "resolved",
+                "paragraph_start_index": first_heading_index,
+                "paragraph_end_index": last_paragraph_index,
+                "preserves_front_matter": first_heading_index > 0,
+            }
+        )
+    else:
+        replace_candidates.append(
+            {
+                "name": "after-front-matter-to-end-of-main-story",
+                "status": "unresolved",
+                "paragraph_start_index": None,
+                "paragraph_end_index": None,
+                "preserves_front_matter": False,
+            }
+        )
+
+    body = document_root.find("w:body", WORD_NAMESPACE)
+    body_sectpr_count = len(body.findall("w:sectPr", WORD_NAMESPACE)) if body is not None else 0
+    return {
+        "paragraph_count": len(paragraphs),
+        "section_count": len(document_root.findall(".//w:sectPr", WORD_NAMESPACE)),
+        "body_section_count": body_sectpr_count,
+        "headings": headings,
+        "anchor_candidates": anchor_candidates,
+        "replace_range_candidates": replace_candidates,
+        "body_regions": {
+            "front_matter_end_paragraph_index": first_heading_index - 1 if first_heading_index not in (None, 0) else None,
+            "main_content_start_paragraph_index": first_heading_index,
+            "main_content_end_paragraph_index": last_paragraph_index,
+        },
+        "preview": preview,
+    }
+
+
+def detect_preserve_parts(field_codes: list[str], header_footer: dict, document_profile: dict) -> list[str]:
+    preserve = ["styles-and-numbering", "section-breaks"]
+    if header_footer["headers"] or header_footer["footers"]:
+        preserve.append("headers-footers")
+
+    normalized_fields = [normalize_text(code) for code in field_codes]
+    if any(" TOC " in f" {code} " or code.startswith("TOC") for code in normalized_fields):
+        preserve.append("toc")
+    if any("FIGURE" in code for code in normalized_fields):
+        preserve.append("list-of-figures")
+    if any("TABLE" in code for code in normalized_fields):
+        preserve.append("list-of-tables")
+    if document_profile.get("section_count", 0) > 0:
+        preserve.append("page-setup")
+
+    return sorted(set(preserve))
+
+
+def write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Lập profile ngắn cho template DOCX.")
+    parser.add_argument("--template-file", required=True)
+    parser.add_argument("--run-dir", required=True)
+    args = parser.parse_args()
+
+    template_file = Path(args.template_file)
+    run_dir = Path(args.run_dir)
+
+    styles_root = read_xml_from_docx(template_file, "word/styles.xml")
+    numbering_root = read_xml_from_docx(template_file, "word/numbering.xml")
+    document_root = read_xml_from_docx(template_file, "word/document.xml")
+    header_footer = detect_header_footer_members(template_file)
+    field_codes = extract_field_codes(document_root)
+    document_profile = classify_body(document_root)
+
+    payload = {
+        "template_file": str(template_file),
+        "style_names": extract_style_names(styles_root),
+        "has_numbering": numbering_root is not None,
+        "has_document_xml": document_root is not None,
+        "header_count": len(header_footer["headers"]),
+        "footer_count": len(header_footer["footers"]),
+        "header_members": header_footer["headers"],
+        "footer_members": header_footer["footers"],
+        "field_codes": field_codes,
+        "preserve_defaults": detect_preserve_parts(field_codes, header_footer, document_profile),
+        "document_profile": document_profile,
+    }
+
+    write_json(run_dir / "template_profile.json", payload)
+
+
+if __name__ == "__main__":
+    main()

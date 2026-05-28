@@ -1,103 +1,149 @@
 ---
 name: docx-from-template
-description: Tạo hoặc append nội dung vào file Word (.docx) dựa trên template theo workflow ngắn, có checkpoint, phù hợp cho OpenCode/Qwen. Dùng khi cần tạo report.docx từ template, chèn thêm chương mới, giữ nguyên nội dung cũ, giữ numbering heading, và không overwrite body hiện có.
+description: Tạo hoặc cập nhật file Word (.docx) từ template theo workflow điều phối ngắn cho các mode rebuild, append, fill placeholder và hybrid, có checkpoint rõ ràng và không kéo toàn bộ nội dung vào context.
 license: MIT
 ---
+
 # SKILL: DOCX_FROM_TEMPLATE
 
 ## Mục tiêu
-Skill này là orchestrator ngắn cho tác vụ tạo hoặc append `.docx` từ template.
+Skill này là orchestrator cho tác vụ tạo hoặc cập nhật `.docx` từ template.
 
-Skill này KHONG day syntax chi tiet cua `officecli`.
-Khi can command, schema element, hoac prop name, load `officecli-docx`.
-Khi can kiem tra TOC, references, appendix, cross-reference, header/footer, load `docx-qa` truoc khi ban giao file.
+Skill này không dạy cú pháp OfficeCLI chi tiết.
+Khi cần lệnh hoặc schema cụ thể, mới load `officecli-docx`.
+Khi cần parse, profile, plan, build, QA qua artifact JSON, load `md-to-docx-pipeline`.
+Khi cần delivery gate cho TOC, references, appendix, cross-reference, header/footer, load `docx-qa`.
 
-## Khi nao dung skill nay
-- Tao file Word moi tu template.
-- Append chuong/muc moi vao file da ton tai.
-- Giu nguyen noi dung dang co trong template/file dich.
-- Tai tao numbering heading `1`, `1.1`, `1.1.1`.
-- Tao `report.docx` tu `format_template.docx` va chen noi dung tu `.md`.
+## Khi nào dùng skill này
+- Tạo `report.docx` từ `format_template.docx`.
+- Rebuild toàn bộ thân bài từ Markdown nhưng giữ format của template.
+- Append chương hoặc mục mới vào file hiện có.
+- Fill placeholder trong template định kỳ.
+- Hybrid edit: vừa append, vừa update các phần phụ thuộc như TOC hoặc references.
 
-## Inputs bat buoc
+## Modes hỗ trợ
+- `preserve-template-scaffold`
+- `replace-main-content-range`
+- `fill-declared-placeholders`
+- `append-structured-section`
+- `full-regenerate-from-schema`
+
+`rebuild-from-template-format` là mode cũ và phải được normalize sang `preserve-template-scaffold` ngay khi phát hiện.
+
+## Inputs bắt buộc
 - `template_file`
-- `content`
-- `mode`: `create` | `append`
+- `mode`
 
-## Inputs bo sung
-- `output_file`: bat buoc khi `mode=create`
-- `target_file`: bat buoc khi `mode=append`
-- `insert_after`: heading/section neo chen sau
+## Inputs theo mode
+
+### `preserve-template-scaffold`
+- `source_file`
+- `target_file`
+- `source_scope`: `full-document` | `section`
+- `preserve`
+- `replace_ranges`
+- `post_conditions`
+
+### `replace-main-content-range`
+- `source_file`
+- `target_file`
+- `replace_ranges`
+
+### `append-structured-section`
+- `source_file`
+- `target_file`
+- `insert_after`
+
+### `fill-declared-placeholders`
+- `target_file` hoặc `template_file`
+- `placeholder_data`
+
+### `full-regenerate-from-schema`
+- `schema_file` hoặc contract tái tạo tương đương
+- `target_file`
 
 ## Invariants
-- Khong bo qua thu tu phase.
-- Khong doan prop name; tra cuu trong `officecli-docx`.
-- `style` va `numbering` la 2 lop rieng; heading co so thu tu phai co `numId` + `ilvl` neu template dung numbered headings.
-- Neu them noi dung moi, phai ra soat cac phan phu thuoc cau truc tai lieu truoc khi giao file.
-- `append` la merge an toan, khong overwrite body cu.
+- Không bỏ qua thứ tự phase.
+- Không đoán `prop`, `type`, `numId`, `ilvl`; nếu thiếu thì tra `officecli-docx`.
+- `style` và `numbering` là hai lớp khác nhau.
+- Mọi mode có thay đổi cấu trúc phải rà TOC, references, appendix, danh mục hình/bảng, cross-reference, header/footer.
+- Không đọc tràn lan full Markdown hoặc dump full DOCX XML vào context khi artifact JSON là đủ.
+- Không được coi `body` là toàn bộ tài liệu. Với DOCX, scaffold ngoài vùng nội dung chính là phần của output bắt buộc phải giữ.
+- Không được dùng chiến lược `clear whole body` trừ khi mode là `full-regenerate-from-schema` và người dùng đã chấp nhận rõ ràng.
 
-## Invariant rat quan trong cho mode append
-Neu `mode=append` va `target_file` CHUA ton tai, khong duoc append vao file rong.
-Phai khoi tao `target_file` bang cach sao chep `template_file` sang `target_file` truoc, roi moi append.
+## Invariant quan trọng cho append
+Nếu `mode=append-structured-section` và `target_file` chưa tồn tại, phải sao chép `template_file` sang `target_file` trước khi chèn nội dung mới.
 
-Neu bo qua buoc nay, agent rat de:
-- mat noi dung chuong truoc do
-- append vao sai nen tai lieu
-- lam TOC, numbering, header/footer bi lech
+## Invariant quan trọng cho preserve scaffold
+Nếu `mode=preserve-template-scaffold`, template không chỉ là nguồn style và layout:
+- Giữ style, numbering, page setup, header/footer, section settings và các field cấu trúc khi phù hợp.
+- Chỉ thay vùng nội dung được xác định trong `replace_ranges`.
+- Không được xóa trắng toàn bộ `w:body` rồi đổ text mới vào.
+- Nếu chưa resolve được `replace_ranges`, phải fail-closed thay vì build liều.
 
+## Routing tối thiểu
+- Luôn bắt đầu bằng workflow ngắn trong skill này.
+- Chỉ load `officecli-docx` khi cần command syntax cụ thể.
+- Load `md-to-docx-pipeline` khi cần sinh hoặc tiêu thụ artifact ngoài context.
+- Load `docx-qa` trước khi bàn giao file, hoặc sớm hơn nếu task có TOC, references, appendix, danh mục hình/bảng, cross-reference, header/footer.
 
-## Routing toi thieu
-- Luon load `officecli-docx`.
-- Load `docx-qa` trong 2 truong hop:
-  - truoc khi giao file
-  - hoac ngay khi task co TOC, references, appendix, danh muc hinh/bang, cross-reference
+## Execution Contract cho prompt chỉ có `@task.md`
+- Nếu task chỉ cung cấp `task.md`, agent vẫn phải tự dựng đầy đủ artifact và không được bỏ qua phase nào.
+- Với `mode=preserve-template-scaffold`, thứ tự tối thiểu là:
+  1. parse markdown
+  2. profile template
+  3. lập plan
+  4. build file đích
+  5. QA semantic + QA schema
+- Không được nhảy từ đọc `task.md` sang gọi một chuỗi lệnh build ad-hoc rồi kết luận xong chỉ dựa trên `validate`.
 
 ## State Machine
 
 ### PHASE 0: Preflight
-Muc tieu: xac nhan moi truong chay va mode thuc thi.
+Mục tiêu: xác nhận mode, file vào/ra, môi trường và đường chạy.
 
-Lam:
-- Xac nhan file dau vao ton tai.
-- Neu dang chay tren Linux/WSL va `officecli` moi duoc cai, nap lai shell hien tai truoc khi chay: `source ~/.bashrc && officecli --version`.
-- Chi neu dang chay Windows native va `officecli` moi duoc cai, moi prepend PATH tam trong session hien tai truoc khi chay.
-- Xac nhan `mode` hop le.
-- Neu `mode=append`, xac nhan `target_file` va `insert_after`.
-- Neu `mode=append` ma `target_file` chua ton tai, sao chep `template_file` thanh `target_file`.
+Làm:
+- Xác nhận file đầu vào tồn tại.
+- Xác nhận `mode` hợp lệ.
+- Nếu `mode=append-to-template`, xác nhận `target_file` và `insert_after`.
+- Nếu `mode=append-to-template` mà `target_file` chưa tồn tại, sao chép `template_file` sang `target_file`.
+- Nếu `mode=rebuild-from-template-format`, xác nhận `source_scope` và output đích.
+- Chỉ kiểm tra OfficeCLI khi execution path thực sự cần OfficeCLI.
 
 Checkpoint schema:
 ```json
 {
   "phase": 0,
   "completed": true,
-  "mode": "append",
+  "mode": "preserve-template-scaffold",
   "working_file": "report.docx",
-  "officecli_ready": true,
   "issues": []
 }
 ```
 
 ### PHASE 1: Analyze
-Muc tieu: lay minimum context can thiet, khong map ca the gioi.
+Mục tiêu: lấy minimum context đủ để quyết định mapping.
 
-Phai lay:
-- outline cua template/file dich
-- style phu hop cho H1/H2/H3/body gan diem chen
-- numbering map neu heading dang duoc danh so
-- cac section phu thuoc: TOC, `TAI LIEU THAM KHAO`, `PHU LUC`, danh muc hinh/bang, cross-reference
+Phải lấy:
+- outline hoặc AST summary của `source_file`
+- template profile rút gọn
+- style map cho H1/H2/H3/body
+- numbering map nếu template có numbered heading
+- các section phụ thuộc: TOC, references, appendix, danh mục hình/bảng, cross-reference
+- candidate range cho phần nội dung chính
+- bằng chứng scaffold nào phải giữ
 
-Khong lam:
-- khong doc tran lan toan file neu khong can
-- khong drill-down moi style neu `view stats` va `/styles --depth 2` da du
+Không làm:
+- không đọc toàn bộ file Markdown vào prompt nếu `content_outline.json` là đủ
+- không dump toàn bộ XML hoặc full command output vào context
 
-Artifact toi thieu:
+Artifact tối thiểu:
 ```json
 {
   "phase": 1,
   "completed": true,
   "analysis": {
-    "anchor": "CƠ SỞ LÝ THUYẾT",
-    "insert_before": "KẾT LUẬN",
+    "mode": "preserve-template-scaffold",
     "styles": {
       "h1": "Heading1",
       "h2": "Heading2",
@@ -105,102 +151,120 @@ Artifact toi thieu:
       "body": "Normal"
     },
     "heading_numbering": true,
-    "numbering_map": {
-      "h1": {"numId": 25, "ilvl": 0},
-      "h2": {"numId": 1, "ilvl": 1},
-      "h3": {"numId": 1, "ilvl": 2}
-    },
-    "dependent_sections": ["toc", "references"]
+    "dependent_sections": ["toc", "references"],
+    "replace_range_candidate": {
+      "strategy": "after-front-matter-to-end-of-main-story",
+      "status": "resolved"
+    }
   },
   "issues": []
 }
 ```
 
-### PHASE 2: Execute
-Muc tieu: tao hoac append noi dung moi ma khong lam hong noi dung cu.
+### PHASE 2: Plan
+Mục tiêu: quyết định cách build mà không kéo thêm context không cần thiết.
 
-#### Neu mode=create
-- Tao file moi.
-- Ap dung document-level properties can thiet.
-- Tao body theo analysis map.
+Kết quả mong đợi:
+- `content_ast.json`
+- `content_outline.json`
+- `template_profile.json`
+- `plan.json`
 
-#### Neu mode=append
-- Lam viec tren `target_file`.
-- Khong xoa content cu.
-- Chen noi dung moi tai neo da xac dinh.
-- Neu co numbered headings, tai su dung numbering co san neu phu hop.
-- Neu section moi lam thay doi cau truc tai lieu, danh dau cac phan phu thuoc can update.
+Quy tắc:
+- Với `preserve-template-scaffold`, plan phải chỉ rõ scaffold nào được giữ, range nào được thay và điều kiện nào buộc fail nếu range không resolve.
+- Với `replace-main-content-range`, plan phải chỉ rõ anchor hoặc chỉ số range đã verify.
+- Với `append-structured-section`, plan phải chỉ rõ anchor và thứ tự cập nhật phần phụ thuộc.
+- Với `fill-declared-placeholders`, plan phải chỉ rõ placeholder map và chiến lược fallback.
+- Với `full-regenerate-from-schema`, plan phải ghi rõ vì sao được phép tái tạo gần như toàn bộ.
+- Với mọi mode, plan phải chỉ rõ cách phát hiện `template residue` sau khi build.
 
-Quy tac thuc thi:
-- Structural first: numbering/page setup/anchor.
-- Content next: heading/body/table.
-- QA-sensitive sections last: TOC, references, appendix, lists, cross-reference.
-- Batch khi co nhieu element cung khu vuc.
+### PHASE 3: Execute
+Mục tiêu: build file đích theo `plan.json`.
 
-Checkpoint schema:
-```json
-{
-  "phase": 2,
-  "completed": true,
-  "working_file": "report.docx",
-  "content_added": {
-    "headings": 3,
-    "paragraphs": 12,
-    "tables": 0
-  },
-  "dependent_sections_to_review": ["toc", "references"],
-  "issues": []
-}
-```
+#### `preserve-template-scaffold`
+- Khởi tạo file đích từ template.
+- Giữ document-level settings cần thiết.
+- Chỉ thay bounded range theo `plan.json`.
+- Đánh dấu các phần phụ thuộc cần refresh hoặc rebuild.
+- Không được chỉ thêm block mới vào body cũ nếu task yêu cầu thay nội dung chính.
+- Nếu build engine không chứng minh được range đã resolve hoặc scaffold còn nguyên, phải fail thay vì tiếp tục finalize.
 
-### PHASE 3: QA
-Muc tieu: xac nhan khong chi body dung, ma cac phan phu thuoc cung dung.
+#### `replace-main-content-range`
+- Làm việc trên `target_file`.
+- Chỉ thay đúng range đã được verify.
 
-Bat buoc kiem tra:
-- outline
-- heading numbering (`numId`, `ilvl`)
-- placeholder ton du
-- validate/issues
-- header/footer
-- TOC
-- references
-- appendix
-- danh muc hinh/bang
-- cross-reference/bookmark lien quan
+#### `append-structured-section`
+- Làm việc trên `target_file`.
+- Không xoá nội dung cũ.
+- Chèn nội dung mới tại anchor đã xác định.
 
-Neu mot phan phu thuoc chua khop, quay lai PHASE 2 va sua. Khong duoc giao file khi body dung nhung TOC/references chua cap nhat.
+#### `fill-declared-placeholders`
+- Áp data vào placeholder.
+- Báo rõ placeholder nào chưa map được.
+
+#### `full-regenerate-from-schema`
+- Chỉ dùng khi người dùng cho phép.
+- Phải ghi rõ các thành phần scaffold chấp nhận tái tạo lại.
 
 Checkpoint schema:
 ```json
 {
   "phase": 3,
   "completed": true,
-  "validation_passed": true,
-  "checks": {
-    "outline": true,
-    "numbering": true,
-    "toc": true,
-    "references": true,
-    "appendix": true,
-    "cross_references": true,
-    "header_footer": true
+  "working_file": "report.docx",
+  "artifacts": {
+    "content_ast": ".office-auto/state/run-001/content_ast.json",
+    "template_profile": ".office-auto/state/run-001/template_profile.json",
+    "plan": ".office-auto/state/run-001/plan.json"
   },
   "issues": []
 }
 ```
 
-### PHASE 4: Finalize
-Muc tieu: dong resident mode, xuat artifact, giao file.
+### PHASE 4: QA
+Mục tiêu: xác nhận body đúng và các phần phụ thuộc không stale.
 
-Lam:
-- `close` file neu dang resident mode
-- visual check bang `view html` neu can
-- ghi report generation ngan gon
+Kiểm tra bắt buộc:
+- outline
+- numbering
+- TOC
+- references
+- appendix
+- danh mục hình/bảng
+- cross-reference
+- header/footer
+- placeholder leak
+- validate/issues
+- semantic text extract
+- template residue
+- duplicate chapter numbering
+- scaffold preservation
+- replace range resolution
+
+Nếu một phần phụ thuộc chưa khớp, quay lại PHASE 3.
+
+#### Hard gate riêng cho `preserve-template-scaffold`
+- `qa_report.json` phải ghi rõ `source_heading_count`, `output_heading_count`, `residual_template_headings`, `duplicate_heading_patterns`, `body_replaced`, `scaffold_preserved`, `replace_ranges_resolved`.
+- Không được coi là pass nếu `body_replaced != true`, `scaffold_preserved != true` hoặc `replace_ranges_resolved != true`.
+- Các mẫu lỗi sau phải fail ngay:
+  - `CHƯƠNG 1. CHƯƠNG 1`
+  - `CHƯƠNG 2. CHƯƠNG 2`
+  - `4.1. 1.1.` hoặc `5.1. 2.1.`
+  - xuất hiện lại `TÀI LIỆU THAM KHẢO` thành hai chương khác nhau trong cùng tài liệu
+
+### PHASE 5: Finalize
+Mục tiêu: chốt artifact và trạng thái bàn giao.
+
+Làm:
+- đóng resident mode nếu có
+- ghi `build_report.json`
+- ghi `qa_report.json`
+- cập nhật `run.json`
 
 Output schema:
 ```json
 {
-  "phase": 4,
+  "phase": 5,
   "completed": true,
   "output_file": "report.docx",
   "final_status": "ready",
@@ -209,24 +273,26 @@ Output schema:
 ```
 
 ## Failure Recovery
-- Neu `officecli` khong nhan lenh tren Linux/WSL session hien tai: `source ~/.bashrc`, kiem tra `which officecli`, roi thu lai.
-- Neu `officecli` khong nhan lenh tren Windows session hien tai: prepend PATH tam va thu lai.
-- Neu khong tim thay neo chen: chen truoc section cuoi nhu `KET LUAN` hoac `TAI LIEU THAM KHAO`, khong chen sau phan tham chieu.
-- Neu numbering sai: dung lai va phan tich `/numbering`, khong doan `numId`.
-- Neu TOC/references/appendix chua cap nhat: quay lai PHASE 2, khong skip sang final.
-- Neu `append` vao file chua khoi tao: tao `target_file` tu `template_file` roi lam lai.
+- Nếu mode không khớp với task, dừng và map lại mode trước khi chạy.
+- Nếu thiếu artifact, tạo lại đúng artifact thiếu thay vì đọc lại toàn bộ input vào context.
+- Nếu numbering sai, quay lại bước profile template và plan mapping.
+- Nếu TOC, references hoặc appendix stale, quay lại execute hoặc repair, không được giao file.
+- Nếu kết quả text extract cho thấy template residue hoặc duplicate heading, phải quay lại execute và sửa cách thay bounded range; không được vá bằng cách chỉ xóa vài heading lẻ.
 
-## Anti-Patterns
-- Append vao file rong trong khi user muon giu noi dung template.
-- Chi them body moi ma bo qua TOC/references/appendix.
-- Chi set `style=Heading2` ma khong set numbering binding.
-- Validate xong roi giao file du TOC van hien `Update field to see table of contents` trong truong hop nguoi nhan khong refresh field.
-- Rebuild lai toan bo document khi user chi yeu cau append.
+## Anti-patterns
+- Load `officecli-docx` như command encyclopedia cho mọi task `.docx`.
+- Dùng `append` hoặc `full regenerate` để ép một task thực chất là preserve scaffold.
+- Đưa full Markdown hoặc full OfficeCLI output vào prompt khi không cần.
+- Chỉ sửa body mà bỏ qua TOC, references, header, footer.
+- Xóa sạch `w:body` chỉ vì thấy cần “đồng bộ nội dung nhanh”.
 
 ## Delivery Rule
-Chi duoc coi la xong khi:
-- file dich van con noi dung cu
-- noi dung moi da duoc chen dung cho
-- numbering dung
-- cac phan phu thuoc da duoc ra soat/cap nhat
-- validation pass
+Chỉ coi là xong khi:
+- mode đúng với yêu cầu
+- artifact đã được ghi đủ để resume
+- body mới đã được tạo đúng trong vùng được phép thay
+- style, numbering, page setup được giữ hoặc map đúng
+- scaffold quan trọng của template vẫn còn
+- các phần phụ thuộc đã được rà soát
+- QA pass
+- với mode preserve scaffold, phải có bằng chứng rõ ràng rằng vùng cũ đã bị thay đúng, scaffold vẫn còn và không còn duplicate chapter patterns trong text extract
