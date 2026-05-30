@@ -24,6 +24,7 @@ def write_json(path: Path, payload: dict | list) -> None:
 def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value)
     ascii_text = "".join(char for char in normalized if not unicodedata.combining(char))
+    ascii_text = ascii_text.replace("Đ", "D").replace("đ", "d")
     return " ".join(ascii_text.upper().split())
 
 

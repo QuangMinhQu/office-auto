@@ -235,9 +235,19 @@ def replace_body_range(template_file: Path, target_file: Path, blocks: list[dict
     inserted_paths: list[str] = []
 
     officecli_open(target_file)
+    removed_count = 0
+    skipped_count = 0
     try:
         for path in reversed(remove_paths):
-            officecli_remove(target_file, str(path))
+            try:
+                officecli_remove(target_file, str(path))
+                removed_count += 1
+            except OfficeCliError as e:
+                err_msg = str(e)
+                if "not_found" in err_msg or "Path not found" in err_msg or "No p found" in err_msg:
+                    skipped_count += 1
+                else:
+                    raise
 
         for block in blocks:
             text = block_text(block)
@@ -262,7 +272,8 @@ def replace_body_range(template_file: Path, target_file: Path, blocks: list[dict
     return {
         "body_children_before": before_count,
         "body_children_after": after_count,
-        "replaced_child_count": len(remove_paths),
+        "replaced_child_count": removed_count,
+        "removed_skipped_count": skipped_count,
         "inserted_block_count": inserted_paragraph_count,
         "inserted_paths": inserted_paths,
         "body_replaced": inserted_paragraph_count > 0,

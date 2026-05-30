@@ -81,7 +81,7 @@ def extract_heading_texts(paragraphs: list[dict]) -> list[str]:
         if not text or style.startswith("TOC"):
             continue
         normalized = normalize_text(text)
-        if style.startswith("HEADING") or normalized.startswith("CHUONG "):
+        if style.startswith("HEADING") or normalized.startswith("CHUONG ") or normalized.startswith("NGHI DINH "):
             results.append(text)
     return results
 
