@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "description": "Optional explicit style overrides for planner. Copy to style_spec.json at repo root or run-dir and adjust style IDs per template.",
+  "style_map": {
+    "legal_chuong": "Chuong",
+    "legal_dieu": "Dieu",
+    "legal_khoan": "Normal",
+    "h1": "Heading1",
+    "h2": "Heading2",
+    "h3": "Heading3",
+    "body": "Normal",
+    "list": "ListParagraph",
+    "reference": "Normal"
+  }
+}

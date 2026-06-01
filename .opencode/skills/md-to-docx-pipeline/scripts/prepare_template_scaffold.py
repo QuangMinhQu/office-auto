@@ -41,6 +41,19 @@ def should_prepare_effective_template(profile: dict, candidate: dict | None) -> 
     return should_prepare, guardrails
 
 
+def choose_scaffold_strategy(profile: dict, candidate: dict | None) -> tuple[str, dict, bool]:
+    should_prepare, guardrails = should_prepare_effective_template(profile, candidate)
+    recommended_path = str((profile.get("topology") or {}).get("recommended_path") or "")
+
+    if recommended_path == "structural_preserve":
+        return "structural_preserve", guardrails, False
+    if recommended_path == "hybrid":
+        return "hybrid", guardrails, False
+    if should_prepare and candidate is not None:
+        return "semantic_style", guardrails, True
+    return "pass_through", guardrails, False
+
+
 def execute_remove_batch(document: Path, commands: list[dict], chunk_size: int = DEFAULT_CHUNK_SIZE) -> dict:
     if not commands:
         return {"summary": {"total": 0, "executed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "chunks": 0}, "results": []}
@@ -96,7 +109,7 @@ def main() -> None:
     profile = read_json(run_dir / "template_profile.json")
 
     candidate = main_story_candidate(profile)
-    should_prepare, guardrails = should_prepare_effective_template(profile, candidate)
+    strategy, guardrails, should_prepare = choose_scaffold_strategy(profile, candidate)
 
     report = {
         "status": "pass-through",
@@ -104,12 +117,26 @@ def main() -> None:
         "effective_template_file": str(template_file),
         "selected_candidate": None if candidate is None else candidate.get("name"),
         "guardrails": guardrails,
+        "strategy": strategy,
         "message": "Template hiện tại đã đủ gần scaffold; không cần derive effective template.",
     }
 
     run_state.setdefault("artifacts", {})["template_preparation_report"] = str(report_file)
 
-    if should_prepare and candidate is not None:
+    if strategy in {"structural_preserve", "hybrid"}:
+        shutil.copy2(template_file, prepared_template_file)
+        report = {
+            "status": "pass-through",
+            "source_template_file": str(template_file),
+            "effective_template_file": str(prepared_template_file),
+            "selected_candidate": None if candidate is None else candidate.get("name"),
+            "guardrails": guardrails,
+            "strategy": strategy,
+            "message": "Topology yêu cầu preserve structure; bỏ qua bước thin-scaffold để tránh phá TOC/bookmark/section.",
+        }
+        run_state.setdefault("artifacts", {})["effective_template"] = str(prepared_template_file)
+
+    elif should_prepare and candidate is not None:
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_key = template_cache_key(template_file)
         cached_template_file = cache_dir / f"{template_file.stem}-{cache_key}.docx"
@@ -124,6 +151,7 @@ def main() -> None:
                 "removed_child_count": len(candidate.get("remove_paths", [])),
                 "remove_batch_summary": {"cached": True},
                 "guardrails": guardrails,
+                "strategy": strategy,
                 "cache_key": cache_key,
                 "cache_hit": True,
                 "message": "Đã reuse scaffold template từ cache cho cùng source template.",
@@ -139,6 +167,7 @@ def main() -> None:
                     "effective_template_file": str(prepared_template_file),
                     "selected_candidate": candidate.get("name"),
                     "guardrails": guardrails,
+                    "strategy": strategy,
                     "remove_batch_summary": remove_batch_result.get("summary", {}),
                     "cache_key": cache_key,
                     "cache_hit": False,
@@ -159,6 +188,7 @@ def main() -> None:
                 "removed_child_count": len(candidate.get("remove_paths", [])),
                 "remove_batch_summary": remove_batch_result.get("summary", {}),
                 "guardrails": guardrails,
+                "strategy": strategy,
                 "cache_key": cache_key,
                 "cache_hit": False,
                 "message": "Đã derive effective template bằng cách giữ scaffold đầu tài liệu và loại bỏ main story cũ khỏi template copy.",

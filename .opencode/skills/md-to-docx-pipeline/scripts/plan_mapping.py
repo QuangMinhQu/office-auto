@@ -19,6 +19,11 @@ BACK_MATTER_MARKERS = {
     "references": {"TAI LIEU THAM KHAO", "REFERENCES", "BIBLIOGRAPHY"},
     "appendix": {"PHU LUC", "APPENDIX"},
 }
+REPO_ROOT = Path(__file__).resolve().parents[4]
+STYLE_SPEC_CANDIDATES = [
+    "style_spec.json",
+    "style-spec.json",
+]
 
 
 def read_json(path: Path) -> dict:
@@ -62,6 +67,13 @@ def style_score(entry: dict, style_graph: dict, target_kind: str) -> tuple[int, 
         list_like = 1 if graph_entry.get("list_like") else 0
         return (reference_like * 10 + numbered_like * 6 + list_like * 4, qformat, custom, 0)
 
+    if target_kind in {"legal_chuong", "legal_dieu", "legal_khoan"}:
+        legal_name = 1 if any(token in name for token in ["CHUONG", "DIEU", "KHOAN", "MUC", "PHAN"]) else 0
+        legal_id = 1 if any(token in style_id for token in ["CHUONG", "DIEU", "KHOAN", "MUC", "PHAN"]) else 0
+        centered_like = 1 if normalize_text(str(entry.get("align") or "")) == "CENTER" else 0
+        numbered_like = 1 if entry.get("num_id") not in (None, "", "0") else 0
+        return (legal_name + legal_id + centered_like, numbered_like, qformat, custom)
+
     level = int(target_kind[1:]) - 1
     outline_match = 3 if outline is not None and str(outline) == str(level) else 0
     resolved_outline = 2 if str(graph_entry.get("resolved_outline_level")) == str(level) else 0
@@ -82,10 +94,23 @@ def choose_style(style_catalog: list[dict], style_graph: dict, target_kind: str,
     return best["style_id"]
 
 
-def infer_style_map(profile: dict) -> dict:
+def load_style_spec(run_dir: Path) -> dict:
+    for candidate in STYLE_SPEC_CANDIDATES:
+        for base in [run_dir, REPO_ROOT]:
+            path = base / candidate
+            if path.exists():
+                payload = read_json(path)
+                payload["_source"] = str(path)
+                return payload
+    return {}
+
+
+def infer_style_map(profile: dict, style_spec: dict | None = None) -> dict:
     style_catalog = profile.get("style_catalog", [])
     style_graph = profile.get("style_graph", {})
     prototype_catalog = profile.get("prototype_catalog", {})
+    style_spec = style_spec or {}
+    explicit_map = style_spec.get("style_map") if isinstance(style_spec.get("style_map"), dict) else {}
 
     def style_from_prototype(role: str, fallback_kind: str, fallback_value: str) -> str:
         prototype = prototype_catalog.get(role, {})
@@ -104,6 +129,9 @@ def infer_style_map(profile: dict) -> dict:
         "reference": reference_style,
         "blockquote": style_from_prototype("blockquote", "body", body_style),
         "code": style_from_prototype("code", "body", body_style),
+        "legal_chuong": style_from_prototype("legal_chuong", "legal_chuong", style_from_prototype("h1", "h1", "Heading1")),
+        "legal_dieu": style_from_prototype("legal_dieu", "legal_dieu", style_from_prototype("h2", "h2", "Heading2")),
+        "legal_khoan": style_from_prototype("legal_khoan", "legal_khoan", body_style),
     }
 
     for role, fallback_roles in {"h1": ["h2", "h3"], "h2": ["h3"]}.items():
@@ -114,6 +142,14 @@ def infer_style_map(profile: dict) -> dict:
             if fallback_style != body_style:
                 style_map[role] = fallback_style
                 break
+
+    for role, fallback in {"legal_chuong": "h1", "legal_dieu": "h2", "legal_khoan": "body"}.items():
+        if style_map.get(role) in (None, "", "Normal"):
+            style_map[role] = style_map.get(fallback, style_map.get("body", "Normal"))
+
+    for role, style_id in explicit_map.items():
+        if isinstance(style_id, str) and style_id.strip():
+            style_map[role] = style_id.strip()
 
     return style_map
 
@@ -179,8 +215,17 @@ def assess_template_guardrails(profile: dict, selected_range: dict | None) -> di
     if len(weak_heading_roles) >= 2:
         risk_flags.append("weak-heading-prototypes")
 
+    topology = profile.get("topology") or {}
+    recommended_path = str(topology.get("recommended_path") or "")
+    if recommended_path in {"structural_preserve", "hybrid"}:
+        risk_flags.append("requires-structural-preserve")
+
     blocking_reasons: list[str] = []
-    if "whole-body-rewrite" in risk_flags and "full-document-template-disguised-as-format" in risk_flags:
+    if (
+        "whole-body-rewrite" in risk_flags
+        and "full-document-template-disguised-as-format" in risk_flags
+        and "requires-structural-preserve" not in risk_flags
+    ):
         blocking_reasons.append(
             "Template hiện tại đang buộc pipeline xóa gần toàn bộ body nhưng không có đủ preserve-part signals; cần template scaffold mỏng hơn hoặc strategy rewrite khác."
         )
@@ -257,6 +302,7 @@ def main() -> None:
     content_ast = read_json(run_dir / "content_ast.json") if (run_dir / "content_ast.json").exists() else {"blocks": []}
     outline_payload = read_json(run_dir / "content_outline.json") if (run_dir / "content_outline.json").exists() else {}
     profile_payload = read_json(run_dir / "template_profile.json")
+    style_spec = load_style_spec(run_dir)
     source_render_window = derive_render_window(
         content_ast.get("blocks", []),
         sample_content_file=existing_artifacts.get("sample_content"),
@@ -267,7 +313,7 @@ def main() -> None:
         "heading_count": len(grounded_outline),
         "outline": grounded_outline,
     }
-    style_map = infer_style_map(profile_payload)
+    style_map = infer_style_map(profile_payload, style_spec)
     normalized_mode = normalize_mode(args.mode)
     preserve_defaults = profile_payload.get("preserve_defaults", [])
     selected_range, range_reason = choose_replace_range(profile_payload, grounded_outline_payload)
@@ -291,6 +337,9 @@ def main() -> None:
         "heading_level_1": "h1",
         "heading_level_2": "h2",
         "heading_level_3_plus": "h3",
+        "legal_chapter": "legal_chuong",
+        "legal_article": "legal_dieu",
+        "legal_clause": "legal_khoan",
         "paragraph": "body",
         "list_item": "list",
         "reference": "reference",
@@ -364,6 +413,7 @@ def main() -> None:
             "selected_range_remove_ratio": template_guardrails.get("selected_range_remove_ratio", 0.0),
             "risk_flags": template_guardrails.get("risk_flags", []),
             "source_render_window": source_render_window,
+            "style_spec_source": style_spec.get("_source"),
         },
         "steps": [
             "Đọc content_ast.json từ parser token-based",

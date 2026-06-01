@@ -16,7 +16,7 @@ Agent chỉ nên thấy:
 - summary JSON ngắn
 
 Không nên thấy:
-- full `chuong_2.md`
+- full `noidung.md`
 - full XML trong `.docx`
 - dump command output dài
 
@@ -28,6 +28,8 @@ Không nên thấy:
 
 ## Artifacts chuẩn
 - `.office-auto/state/<run_id>/preflight.json`
+- `.office-auto/state/<run_id>/topology.json`
+- `.office-auto/state/<run_id>/template_suitability_report.json`
 - `.office-auto/state/<run_id>/run.json`
 - `.office-auto/state/<run_id>/template_preparation_report.json`
 - `.office-auto/state/<run_id>/effective_template.docx`
@@ -43,6 +45,7 @@ Không nên thấy:
 - `.office-auto/state/<run_id>/plan.json`
 - `.office-auto/state/<run_id>/execution_plan.json`
 - `.office-auto/state/<run_id>/build_report.json`
+- `.office-auto/state/<run_id>/post_process_report.json`
 - `.office-auto/state/<run_id>/review_report.json`
 - `.office-auto/state/<run_id>/review_report.md`
 - `.office-auto/state/<run_id>/review_screen.html`
@@ -52,19 +55,24 @@ Không nên thấy:
 - `.office-auto/state/<run_id>/pipeline_report.json` khi chạy qua wrapper `scripts/build_report.py`
 
 ## Trình tự chạy
-1. `scripts/profile_template.py`
-2. `scripts/prepare_template_scaffold.py` khi template lịch sử quá dày
-3. `scripts/profile_template.py` lại nếu wrapper đã sinh `effective_template.docx`
-4. `scripts/generate_markitdown_style_map.py`
-5. `scripts/input_processor.py`
-6. `scripts/extract_sample_content.py`
-7. `scripts/parse_markdown.py`
-8. `scripts/plan_mapping.py`
-9. `scripts/compile_execution_plan.py`
-10. `scripts/build_docx.py`
-11. `scripts/roundtrip_markitdown.py`
-12. `scripts/qa_docx.py`
-13. `scripts/review_docx.py`
+1. `scripts/document_topology_detector.py`
+2. `scripts/profile_template.py`
+3. `scripts/template_suitability_report.py`
+4. `scripts/prepare_template_scaffold.py` khi template lịch sử quá dày
+5. `scripts/document_topology_detector.py` lại nếu wrapper đã sinh `effective_template.docx`
+6. `scripts/profile_template.py` lại nếu wrapper đã sinh `effective_template.docx`
+7. `scripts/template_suitability_report.py` lại sau profile cập nhật
+8. `scripts/generate_markitdown_style_map.py`
+9. `scripts/input_processor.py`
+10. `scripts/extract_sample_content.py`
+11. `scripts/parse_markdown.py`
+12. `scripts/plan_mapping.py`
+13. `scripts/compile_execution_plan.py`
+14. `scripts/build_docx.py`
+15. `scripts/post_process_docx.py`
+16. `scripts/roundtrip_markitdown.py`
+17. `scripts/qa_docx.py`
+18. `scripts/review_docx.py`
 
 ## Contract ngắn cho từng script
 

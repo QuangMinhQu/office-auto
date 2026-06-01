@@ -11,6 +11,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 import compile_execution_plan
 import build_docx
+import document_topology_detector
 import generate_markitdown_style_map
 import officecli_native
 import markitdown_support
@@ -38,6 +39,14 @@ class MarkdownParserTests(unittest.TestCase):
         self.assertTrue(any(run.get("italic") for run in runs))
         self.assertTrue(any(run.get("code") for run in runs))
         self.assertEqual(blocks[2]["rows"][1]["cells"][0]["text"], "1")
+
+    def test_parse_markdown_annotates_legal_semantic_roles(self) -> None:
+        markdown = """# CHƯƠNG I QUY ĐỊNH CHUNG\n\n## Điều 1. Phạm vi điều chỉnh\n\n1. Khoản một.\n"""
+        blocks, outline, _ = parse_markdown.parse_markdown_blocks(markdown)
+
+        self.assertEqual(outline[0]["semantic_role"], "legal_chuong")
+        self.assertEqual(outline[1]["semantic_role"], "legal_dieu")
+        self.assertEqual(blocks[2]["semantic_role"], "legal_khoan")
 
 
 class OfficeCliContractTests(unittest.TestCase):
@@ -94,6 +103,24 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(style_map["body"], "Normal")
         self.assertEqual(style_map["h1"], "Heading2")
         self.assertEqual(style_map["h2"], "Heading2")
+
+    def test_infer_style_map_accepts_explicit_style_spec_overrides(self) -> None:
+        style_map = plan_mapping.infer_style_map(
+            {
+                "style_catalog": [{"style_id": "Normal", "name": "Normal", "default": True}],
+                "style_graph": {},
+                "prototype_catalog": {"body": {"style_id": "Normal"}},
+            },
+            {
+                "style_map": {
+                    "legal_chuong": "Chuong",
+                    "legal_dieu": "Dieu",
+                }
+            },
+        )
+
+        self.assertEqual(style_map["legal_chuong"], "Chuong")
+        self.assertEqual(style_map["legal_dieu"], "Dieu")
 
     def test_choose_replace_range_prefers_bounded_zone_when_source_has_no_references(self) -> None:
         profile = {
@@ -626,6 +653,50 @@ class TemplatePreparationTests(unittest.TestCase):
 
         self.assertFalse(should_prepare)
         self.assertEqual(guardrails["blocking_reasons"], [])
+
+    def test_choose_scaffold_strategy_prefers_structural_preserve_from_topology(self) -> None:
+        strategy, _, should_prepare = prepare_template_scaffold.choose_scaffold_strategy(
+            {
+                "topology": {"recommended_path": "structural_preserve"},
+                "header_count": 0,
+                "footer_count": 0,
+                "field_graph": {
+                    "has_toc": False,
+                    "has_list_of_figures": False,
+                    "has_list_of_tables": False,
+                    "pageref_anchors": [],
+                },
+                "prototype_catalog": {
+                    "h1": {"style_id": "Normal", "style_name": "Normal"},
+                    "h2": {"style_id": "Normal", "style_name": "Normal"},
+                },
+                "document_profile": {"direct_body_child_count": 3406},
+            },
+            {"name": "after-front-matter-to-end-of-main-story", "status": "resolved", "remove_paths": ["/body/p[2]"]},
+        )
+
+        self.assertEqual(strategy, "structural_preserve")
+        self.assertFalse(should_prepare)
+
+
+class TopologyDetectorTests(unittest.TestCase):
+    def test_infer_recommended_path_returns_structural_preserve_when_fields_present(self) -> None:
+        path, reason = document_topology_detector.infer_recommended_path(
+            {
+                "has_toc_field": True,
+                "has_pageref": False,
+                "has_bookmarks": False,
+                "has_tables": False,
+                "has_footnotes": False,
+                "has_textboxes": False,
+                "has_comments": False,
+                "has_multiple_sections": False,
+                "style_discipline_ratio": 0.95,
+            }
+        )
+
+        self.assertEqual(path, "structural_preserve")
+        self.assertIn("preserve", reason.lower())
 
 
 class TemplateProfileTests(unittest.TestCase):

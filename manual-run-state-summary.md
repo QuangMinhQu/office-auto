@@ -9,7 +9,7 @@ Tài liệu này gom các value chính trong state của run gần nhất để 
 | Run dir | .office-auto/state/manual-run |
 | Status | completed |
 | Mode | preserve-template-scaffold |
-| Source file | chuong_2.md |
+| Source file | noidung.md |
 | Template file | format_template.docx |
 | Effective template | .office-auto/state/manual-run/effective_template.docx |
 | Target file | report.docx |
@@ -47,7 +47,7 @@ State này chứa nhiều file phụ trợ. Các file quan trọng nhất là:
 | --- | --- |
 | mode_requested | preserve-template-scaffold |
 | mode | preserve-template-scaffold |
-| source_file | chuong_2.md |
+| source_file | noidung.md |
 | template_file | .office-auto/state/manual-run/effective_template.docx |
 | target_file | report.docx |
 | preserve | page-setup, section-breaks, styles-and-numbering |
@@ -146,7 +146,7 @@ Tất cả các role sau đều trỏ về cùng một prototype path trong effe
 | Trường | Giá trị |
 | --- | --- |
 | status | completed |
-| source_file | chuong_2.md |
+| source_file | noidung.md |
 | normalized_file | .office-auto/state/manual-run/normalized.md |
 | source_extension | .md |
 | mode | pass-through |

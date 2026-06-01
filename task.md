@@ -5,7 +5,7 @@ Tài liệu này là contract mặc định để agent chạy đúng workflow c
 ## Mặc định của repo
 
 - `mode`: `preserve-template-scaffold`
-- `source_file`: `chuong_2.md`
+- `source_file`: `noidung.md`
 - `template_file`: `format_template.docx`
 - `target_file`: `report.docx`
 - `run_dir`: `.office-auto/state/<run_id>`
@@ -15,7 +15,7 @@ Nếu người dùng không override file path, agent phải dùng đúng bộ m
 
 ## Mục tiêu
 
-- Sinh `report.docx` mới từ `chuong_2.md`.
+- Sinh `report.docx` mới từ `noidung.md`.
 - Giữ scaffold của `format_template.docx`, không coi template chỉ là nguồn style.
 - Để lại đầy đủ artifact để có thể truy nguyên từ input normalization tới review cuối.
 
@@ -23,12 +23,14 @@ Nếu người dùng không override file path, agent phải dùng đúng bộ m
 
 ```yaml
 mode: preserve-template-scaffold
-source_file: chuong_2.md
+source_file: noidung.md
 template_file: format_template.docx
 target_file: report.docx
 wrapper: scripts/build_report.py
 required_artifacts:
 	- preflight.json
+	- topology.json
+	- template_suitability_report.json
 	- pipeline_report.json
 	- run.json
 	- template_preparation_report.json
@@ -50,19 +52,24 @@ required_artifacts:
 
 ## Trình tự phải đi qua
 
-1. `profile_template.py`
-2. `prepare_template_scaffold.py` nếu template quá dày
-3. `profile_template.py` lại nếu đã sinh `effective_template.docx`
-4. `generate_markitdown_style_map.py`
-5. `input_processor.py`
-6. `extract_sample_content.py`
-7. `parse_markdown.py`
-8. `plan_mapping.py`
-9. `compile_execution_plan.py`
-10. `build_docx.py`
-11. `roundtrip_markitdown.py`
-12. `qa_docx.py`
-13. `review_docx.py`
+1. `document_topology_detector.py`
+2. `profile_template.py`
+3. `template_suitability_report.py`
+4. `prepare_template_scaffold.py` nếu template quá dày
+5. `document_topology_detector.py` lại nếu đã sinh `effective_template.docx`
+6. `profile_template.py` lại nếu đã sinh `effective_template.docx`
+7. `template_suitability_report.py` lại sau profile cập nhật
+8. `generate_markitdown_style_map.py`
+9. `input_processor.py`
+10. `extract_sample_content.py`
+11. `parse_markdown.py`
+12. `plan_mapping.py`
+13. `compile_execution_plan.py`
+14. `build_docx.py`
+15. `post_process_docx.py`
+16. `roundtrip_markitdown.py`
+17. `qa_docx.py`
+18. `review_docx.py`
 
 Không được bỏ qua wrapper để nhảy sang vài lệnh OfficeCLI rời rạc rồi kết luận xong.
 
@@ -82,7 +89,7 @@ Agent không được coi task là xong nếu thiếu một trong các điều s
 ```bash
 python scripts/build_report.py \
 	--run-dir .office-auto/state/manual-run \
-	--source-file chuong_2.md \
+	--source-file noidung.md \
 	--template-file format_template.docx \
 	--target-file report.docx
 ```
@@ -95,7 +102,7 @@ python scripts/latest_review_artifacts.py
 
 ## Kết quả mong muốn
 
-- `report.docx` phản ánh nội dung của `chuong_2.md` trong vùng nội dung chính.
+- `report.docx` phản ánh nội dung của `noidung.md` trong vùng nội dung chính.
 - Template vẫn giữ scaffold hình thức.
 - Run để lại đủ artifact để biết rõ fail ở bước nào nếu chưa đạt.
 - Review artifact đủ để agent hoặc người vận hành soi formatting drift mà QA thuần JSON chưa nói hết.

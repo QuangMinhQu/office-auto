@@ -21,6 +21,9 @@ BACK_MATTER_MARKERS = {
     "references": {"TAI LIEU THAM KHAO", "REFERENCES", "BIBLIOGRAPHY"},
     "appendix": {"PHU LUC", "APPENDIX"},
 }
+LEGAL_CHAPTER_PATTERN = re.compile(r"^(?:CHƯƠNG|CHUONG)\s+[IVXLCDM\d]+", re.IGNORECASE)
+LEGAL_ARTICLE_PATTERN = re.compile(r"^ĐIỀU\s+\d+", re.IGNORECASE)
+LEGAL_CLAUSE_PATTERN = re.compile(r"^(?:KHOẢN\s+\d+|\d+\.)", re.IGNORECASE)
 PLACEHOLDER_PATTERN = re.compile(r"\{\{[^{}]+\}\}|<TODO>|\b(?:lorem ipsum|xxxx)\b", re.IGNORECASE)
 LEGACY_DUPLICATE_PATTERNS = [
     "CHƯƠNG 1. CHƯƠNG 1",
@@ -73,6 +76,12 @@ def collect_body_paragraphs(paragraph_results: list[dict]) -> list[dict]:
                 "text": str(result.get("text") or "").strip(),
                 "style": style_name,
                 "style_id": result_format.get("styleId"),
+                "format_profile": {
+                    "align": result_format.get("effective.align") or result_format.get("align"),
+                    "size": result_format.get("effective.size") or result_format.get("size"),
+                    "font": result_format.get("effective.font.ascii") or result_format.get("font.ascii") or result_format.get("font.latin"),
+                    "first_line_indent": result_format.get("effective.firstLineIndent") or result_format.get("firstLineIndent"),
+                },
                 "bookmarks": bookmarks,
             }
         )
@@ -231,6 +240,113 @@ def required_heading_numbering(plan: dict) -> bool:
     return False
 
 
+def legal_role_from_text(text: str) -> str | None:
+    if LEGAL_CHAPTER_PATTERN.match(text):
+        return "legal_chuong"
+    if LEGAL_ARTICLE_PATTERN.match(text):
+        return "legal_dieu"
+    if LEGAL_CLAUSE_PATTERN.match(text):
+        return "legal_khoan"
+    return None
+
+
+def expected_role(paragraph: dict, style_map: dict) -> str | None:
+    style_tokens = {
+        normalize_text(paragraph.get("style") or ""),
+        normalize_text(paragraph.get("style_id") or ""),
+    }
+    for role, style_id in style_map.items():
+        if normalize_text(str(style_id or "")) in style_tokens:
+            return role
+
+    text = str(paragraph.get("text") or "")
+    return legal_role_from_text(text)
+
+
+def prototype_expected_format(role: str, prototype_catalog: dict) -> dict:
+    prototype = prototype_catalog.get(role) or {}
+    if not prototype and role in {"legal_dieu", "legal_khoan", "reference", "list", "blockquote", "code"}:
+        prototype = prototype_catalog.get("body") or {}
+    if not prototype and role == "legal_chuong":
+        prototype = prototype_catalog.get("h1") or prototype_catalog.get("body") or {}
+
+    paragraph_format = prototype.get("paragraph_format") or {}
+    first_run = next((run for run in prototype.get("runs", []) if str(run.get("text") or "").strip()), {})
+    return {
+        "align": paragraph_format.get("align"),
+        "size": first_run.get("size") or paragraph_format.get("size"),
+        "font": first_run.get("font_ascii") or first_run.get("font_latin") or paragraph_format.get("font_ascii") or paragraph_format.get("font_latin"),
+        "first_line_indent": paragraph_format.get("first_line_indent"),
+    }
+
+
+def check_format_fidelity(paragraphs: list[dict], style_map: dict, prototype_catalog: dict) -> tuple[list[dict], dict]:
+    violations: list[dict] = []
+    counters = {
+        "alignment_drift": 0,
+        "font_size_drift": 0,
+        "font_family_drift": 0,
+        "first_line_indent_drift": 0,
+    }
+
+    for paragraph in paragraphs:
+        text = str(paragraph.get("text") or "")
+        if not text:
+            continue
+        role = expected_role(paragraph, style_map)
+        if not role:
+            continue
+
+        expected = prototype_expected_format(role, prototype_catalog)
+        actual = paragraph.get("format_profile") or {}
+        row_issues: list[str] = []
+
+        expected_align = str(expected.get("align") or "").lower()
+        actual_align = str(actual.get("align") or "").lower()
+        if expected_align and actual_align and expected_align != actual_align:
+            counters["alignment_drift"] += 1
+            row_issues.append("alignment_drift")
+
+        expected_size = str(expected.get("size") or "")
+        actual_size = str(actual.get("size") or "")
+        if expected_size and actual_size and expected_size != actual_size:
+            counters["font_size_drift"] += 1
+            row_issues.append("font_size_drift")
+
+        expected_font = normalize_text(str(expected.get("font") or ""))
+        actual_font = normalize_text(str(actual.get("font") or ""))
+        if expected_font and actual_font and expected_font != actual_font:
+            counters["font_family_drift"] += 1
+            row_issues.append("font_family_drift")
+
+        expected_indent = str(expected.get("first_line_indent") or "")
+        actual_indent = str(actual.get("first_line_indent") or "")
+        if expected_indent and actual_indent and expected_indent != actual_indent:
+            counters["first_line_indent_drift"] += 1
+            row_issues.append("first_line_indent_drift")
+
+        if row_issues:
+            violations.append(
+                {
+                    "index": paragraph.get("index"),
+                    "path": paragraph.get("path"),
+                    "role": role,
+                    "style": paragraph.get("style") or paragraph.get("style_id"),
+                    "issues": row_issues,
+                    "expected": expected,
+                    "actual": actual,
+                }
+            )
+
+    hard_fail = counters["alignment_drift"] + counters["font_size_drift"] + counters["font_family_drift"] > 0
+    return violations, {
+        "checked_paragraphs": len([paragraph for paragraph in paragraphs if str(paragraph.get("text") or "")]),
+        "violation_count": len(violations),
+        **counters,
+        "hard_fail": hard_fail,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sinh qa_report.json cho pipeline DOCX.")
     parser.add_argument("--run-dir", required=True)
@@ -267,6 +383,11 @@ def main() -> None:
     field_codes = field_instructions(field_results)
     prototype_roles = plan.get("prototype_roles", {})
     heading_texts = extract_heading_texts(paragraphs, prototype_roles)
+    format_violations, format_fidelity = check_format_fidelity(
+        paragraphs,
+        plan.get("style_map", {}),
+        template_profile.get("prototype_catalog", {}),
+    )
     grounded_outline = filter_outline(outline_payload.get("outline", []), source_render_window)
     source_headings = [item.get("text", "") for item in grounded_outline]
     normalized_document_text = "\n".join(str(element.get("text") or "") for element in text_payload.get("elements", []))
@@ -354,6 +475,7 @@ def main() -> None:
     placeholder_ok = not placeholder_leak(normalized_document_text)
     execution_plan_ready = execution_plan.get("status") == "ready"
     semantic_roundtrip_ok = roundtrip_report.get("status") == "passed"
+    format_fidelity_ok = not format_fidelity.get("hard_fail", False)
 
     qa_report = {
         "status": "passed" if all([
@@ -370,6 +492,7 @@ def main() -> None:
             not template_residue,
             not duplicate_patterns,
             placeholder_ok,
+            format_fidelity_ok,
             validate_ok,
             not severe_issues,
         ]) else "failed",
@@ -399,6 +522,7 @@ def main() -> None:
             "cross_references": cross_references_ok,
             "header_footer": scaffold_checks["headers_footers"],
             "placeholder_leak": placeholder_ok,
+            "format_fidelity": format_fidelity_ok,
             "validate": validate_ok,
             "section_breaks": scaffold_checks["section_breaks"],
             "direct_body_remove": remove_strategy_ok,
@@ -412,6 +536,9 @@ def main() -> None:
         "toc_missing_hyperlinks": [entry["index"] for entry in toc_missing_hyperlinks],
         "toc_broken_anchor_entries": toc_broken_anchors,
         "semantic_roundtrip_ok": semantic_roundtrip_ok,
+        "format_fidelity_ok": format_fidelity_ok,
+        "format_fidelity_summary": format_fidelity,
+        "format_fidelity_violations": format_violations[:50],
         "roundtrip_missing_headings": roundtrip_report.get("missing_headings", []),
         "roundtrip_extra_headings": roundtrip_report.get("extra_headings", []),
         "roundtrip_body_text_similarity": roundtrip_report.get("body_text_similarity_summary", {}),

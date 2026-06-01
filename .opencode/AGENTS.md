@@ -40,7 +40,7 @@ officecli --version
 
 ## Default repo workflow
 - Với repo này, nếu người dùng yêu cầu tạo hoặc cập nhật DOCX nhưng không chỉ rõ path, mặc định dùng:
-	- `source_file=chuong_2.md`
+	- `source_file=noidung.md`
 	- `template_file=format_template.docx`
 	- `target_file=report.docx`
 	- `mode=preserve-template-scaffold`

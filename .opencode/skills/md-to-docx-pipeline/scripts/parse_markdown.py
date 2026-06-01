@@ -18,6 +18,9 @@ except ImportError as exc:
 REFERENCE_PATTERN = re.compile(r"^\[(\d+)\]\s+(.*)$")
 INLINE_BREAK_TYPES = {"softbreak", "hardbreak"}
 SECTION_REFERENCE = "references"
+LEGAL_CHAPTER_PATTERN = re.compile(r"^(?:CHƯƠNG|CHUONG)\s+[IVXLCDM\d]+", re.IGNORECASE)
+LEGAL_ARTICLE_PATTERN = re.compile(r"^ĐIỀU\s+\d+", re.IGNORECASE)
+LEGAL_CLAUSE_PATTERN = re.compile(r"^(?:KHOẢN\s+\d+|\d+\.)", re.IGNORECASE)
 
 
 def normalize_heading_text(value: str) -> str:
@@ -30,6 +33,28 @@ def strip_heading_numbering(text: str) -> str:
     stripped = re.sub(r"^(?:\d+(?:\.\d+)*\.?\s+)", "", stripped)
     stripped = re.sub(r"^(?:[IVXLCDM]+\.|[A-Z]\.)\s+", "", stripped)
     return stripped.strip()
+
+
+def detect_legal_semantic_role(text: str, *, heading_level: int | None = None) -> str | None:
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if not normalized:
+        return None
+
+    if LEGAL_CHAPTER_PATTERN.match(normalized):
+        return "legal_chuong"
+    if LEGAL_ARTICLE_PATTERN.match(normalized):
+        return "legal_dieu"
+    if LEGAL_CLAUSE_PATTERN.match(normalized):
+        return "legal_khoan"
+
+    if heading_level is not None:
+        if heading_level == 1:
+            return "h1"
+        if heading_level == 2:
+            return "h2"
+        return "h3"
+
+    return None
 
 
 def parser() -> MarkdownIt:
@@ -222,12 +247,14 @@ def parse_list_item(
                 "ordinal": ordinal,
                 "level": level,
             } if block_type == "list_item" else {"list_parent_level": level}
+            semantic_role = detect_legal_semantic_role(paragraph_text)
             blocks.append(
                 {
                     "type": block_type,
                     "text": paragraph_text,
                     "runs": paragraph_runs,
                     "line": paragraph_line,
+                    "semantic_role": semantic_role,
                     **extra,
                 }
             )
@@ -385,17 +412,19 @@ def parse_markdown_blocks(text: str) -> tuple[list[dict[str, Any]], list[dict[st
             raw_title = runs_to_text(heading_runs).strip()
             title = strip_heading_numbering(raw_title)
             level = int(token.tag[1])
+            semantic_role = detect_legal_semantic_role(raw_title, heading_level=level)
             heading_block = {
                 "type": "heading",
                 "level": level,
                 "text": title,
                 "runs": [{**run, "text": strip_heading_numbering(str(run.get("text") or ""))} for run in heading_runs if str(run.get("text") or "").strip()],
                 "line": line_number(token),
+                "semantic_role": semantic_role,
             }
             if not heading_block["runs"]:
                 heading_block["runs"] = [{"text": title}]
             blocks.append(heading_block)
-            outline.append({"level": level, "text": title, "line": line_number(token)})
+            outline.append({"level": level, "text": title, "line": line_number(token), "semantic_role": semantic_role})
 
             previous_section = current_section
             current_section = SECTION_REFERENCE if normalize_heading_text(title) == "TÀI LIỆU THAM KHẢO" else None
@@ -408,11 +437,13 @@ def parse_markdown_blocks(text: str) -> tuple[list[dict[str, Any]], list[dict[st
         if token.type == "paragraph_open":
             inline_token = tokens[index + 1]
             block = make_paragraph_block(block_type="paragraph", inline_token=inline_token, line=line_number(token))
+            block["semantic_role"] = detect_legal_semantic_role(str(block.get("text") or ""))
             if current_section == SECTION_REFERENCE:
                 reference_block = parse_reference_line(block["text"])
                 if reference_block is not None:
                     reference_block["runs"] = block["runs"]
                     reference_block["line"] = block["line"]
+                    reference_block["semantic_role"] = "reference"
                     block = reference_block
             blocks.append(block)
             index += 3

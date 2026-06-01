@@ -68,7 +68,7 @@ def officecli_version() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chạy pipeline build DOCX an toàn theo contract preserve-template-scaffold.")
     parser.add_argument("--run-dir", default=str(BASE / ".office-auto/state/manual-run"))
-    parser.add_argument("--source-file", default=str(BASE / "chuong_2.md"))
+    parser.add_argument("--source-file", default=str(BASE / "noidung.md"))
     parser.add_argument("--sample-file", default=None)
     parser.add_argument("--template-file", default=str(TEMPLATE))
     parser.add_argument("--target-file", default=str(TARGET))
@@ -115,7 +115,11 @@ def main() -> None:
             return False
         return False
 
-    if not run_and_record("profile_template.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+    if not run_and_record("document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+        pass
+    elif not run_and_record("profile_template.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+        pass
+    elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
         pass
     elif not run_and_record(
         "prepare_template_scaffold.py",
@@ -129,7 +133,11 @@ def main() -> None:
         write_json(run_dir / "preflight.json", preflight)
 
         if effective_template_file != args.template_file:
-            if not run_and_record("profile_template.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
+            if not run_and_record("document_topology_detector.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
+                pass
+            elif not run_and_record("profile_template.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
+                pass
+            elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
                 pass
 
         if failed_step is None and not run_and_record("generate_markitdown_style_map.py", ["--run-dir", str(run_dir)]):
@@ -183,6 +191,8 @@ def main() -> None:
         if failed_step is None and not run_and_record("compile_execution_plan.py", ["--run-dir", str(run_dir)]):
             pass
         if failed_step is None and not run_and_record("build_docx.py", ["--run-dir", str(run_dir)], retries=1):
+            pass
+        if failed_step is None and not run_and_record("post_process_docx.py", ["--run-dir", str(run_dir)]):
             pass
         if failed_step is None and not run_and_record(
             "roundtrip_markitdown.py",

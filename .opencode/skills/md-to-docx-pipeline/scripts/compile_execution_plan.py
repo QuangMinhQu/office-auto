@@ -42,6 +42,10 @@ def block_runs(block: dict) -> list[dict]:
 
 
 def role_for_block(block: dict) -> str:
+    semantic_role = str(block.get("semantic_role") or "").strip().lower()
+    if semantic_role in {"legal_chuong", "legal_dieu", "legal_khoan"}:
+        return semantic_role
+
     block_type = block.get("type")
     if block_type == "heading":
         level = int(block.get("level", 1))
@@ -67,8 +71,10 @@ def prototype_paragraph_defaults(role: str, prototype_catalog: dict) -> dict:
     role_prototype = prototype_catalog.get(role) or {}
     if role_prototype:
         return role_prototype
-    if role in {"body", "list", "reference", "blockquote", "code"}:
+    if role in {"body", "list", "reference", "blockquote", "code", "legal_dieu", "legal_khoan"}:
         return prototype_catalog.get("body", {})
+    if role in {"legal_chuong"}:
+        return prototype_catalog.get("h1", {}) or prototype_catalog.get("body", {})
     return {}
 
 
@@ -77,13 +83,13 @@ def inherits_emphasis_defaults(role: str) -> bool:
 
 
 def prefers_justified_body_alignment(role: str) -> bool:
-    return role in {"body", "list", "reference", "blockquote"}
+    return role in {"body", "list", "reference", "blockquote", "legal_dieu", "legal_khoan"}
 
 
 def paragraph_set_props(block: dict, role: str, style_map: dict, prototype_catalog: dict, first_run: dict | None = None) -> dict:
     props: dict = {}
     prototype = prototype_paragraph_defaults(role, prototype_catalog)
-    if role in {"h1", "h2", "h3", "body", "list", "reference", "blockquote", "code"}:
+    if role in {"h1", "h2", "h3", "body", "list", "reference", "blockquote", "code", "legal_chuong", "legal_dieu", "legal_khoan"}:
         props["style"] = style_map.get(role, style_map.get("body", "Normal"))
 
     paragraph_format = prototype.get("paragraph_format", {})

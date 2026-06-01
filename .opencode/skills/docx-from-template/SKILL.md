@@ -93,7 +93,7 @@ Nếu `mode=preserve-template-scaffold`, template không chỉ là nguồn style
 
 ## Execution Contract cho prompt chỉ có `@task.md`
 - Nếu task chỉ cung cấp `task.md`, agent vẫn phải tự dựng đầy đủ artifact và không được bỏ qua phase nào.
-- Nếu prompt chỉ là yêu cầu ngắn kiểu “sinh report.docx mới” hoặc “đọc task.md và làm”, mặc định dùng bộ path chuẩn của repo: `chuong_2.md`, `format_template.docx`, `report.docx`.
+- Nếu prompt chỉ là yêu cầu ngắn kiểu “sinh report.docx mới” hoặc “đọc task.md và làm”, mặc định dùng bộ path chuẩn của repo: `noidung.md`, `format_template.docx`, `report.docx`.
 - Đường chạy mặc định là `scripts/build_report.py`; không được thay bằng vài lệnh OfficeCLI rời rạc nếu wrapper vẫn áp dụng được.
 - Với `mode=preserve-template-scaffold`, thứ tự tối thiểu là:
   1. profile template

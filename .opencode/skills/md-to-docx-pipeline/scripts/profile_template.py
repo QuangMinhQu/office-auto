@@ -13,6 +13,7 @@ from officecli_native import (
     officecli_get,
     officecli_query,
     officecli_view,
+    read_json,
     to_int,
     write_json,
 )
@@ -25,6 +26,9 @@ BACK_MATTER_MARKERS = {
     "references": {"TAI LIEU THAM KHAO", "REFERENCES", "BIBLIOGRAPHY"},
     "appendix": {"PHU LUC", "APPENDIX"},
 }
+LEGAL_CHAPTER_PATTERN = re.compile(r"^(?:CHƯƠNG|CHUONG)\s+[IVXLCDM\d]+", re.IGNORECASE)
+LEGAL_ARTICLE_PATTERN = re.compile(r"^ĐIỀU\s+\d+", re.IGNORECASE)
+LEGAL_CLAUSE_PATTERN = re.compile(r"^(?:KHOẢN\s+\d+|\d+\.)", re.IGNORECASE)
 
 
 def looks_like_heading_style(style: str | None) -> bool:
@@ -100,17 +104,29 @@ def paragraph_runs(result: dict) -> list[dict]:
 def paragraph_format_snapshot(paragraph_format: dict) -> dict:
     snapshot: dict[str, Any] = {}
     for source_key, target_key in [
+        ("effective.align", "align"),
         ("align", "align"),
+        ("effective.firstLineIndent", "first_line_indent"),
+        ("firstLineIndent", "first_line_indent"),
+        ("effective.leftIndent", "left_indent"),
+        ("leftIndent", "left_indent"),
+        ("effective.rightIndent", "right_indent"),
+        ("rightIndent", "right_indent"),
         ("styleId", "style_id"),
         ("styleName", "style_name"),
         ("style", "style"),
         ("numId", "num_id"),
         ("ilvl", "ilvl"),
         ("listStyle", "list_style"),
+        ("effective.spaceBefore", "space_before"),
         ("spaceBefore", "space_before"),
+        ("effective.spaceAfter", "space_after"),
         ("spaceAfter", "space_after"),
+        ("effective.lineSpacing", "line_spacing"),
         ("lineSpacing", "line_spacing"),
+        ("effective.lineRule", "line_rule"),
         ("lineRule", "line_rule"),
+        ("effective.hangingIndent", "hanging_indent"),
         ("hangingIndent", "hanging_indent"),
         ("size", "size"),
         ("effective.size", "size"),
@@ -752,6 +768,19 @@ def is_preferred_body_prototype(paragraph: dict, style_graph: dict) -> bool:
     return has_lowercase and ends_like_sentence and len(text) >= 24 and align != "center" and not is_bold and not is_italic and not is_all_caps_like_text(text)
 
 
+def legal_semantic_role(text: str) -> str | None:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return None
+    if LEGAL_CHAPTER_PATTERN.match(normalized):
+        return "legal_chuong"
+    if LEGAL_ARTICLE_PATTERN.match(normalized):
+        return "legal_dieu"
+    if LEGAL_CLAUSE_PATTERN.match(normalized):
+        return "legal_khoan"
+    return None
+
+
 def extract_prototype_catalog(body_paragraphs: list[dict], style_graph: dict, reference_profile: dict, document_profile: dict) -> dict:
     headings = document_profile.get("headings", [])
     main_start = document_profile.get("body_regions", {}).get("main_content_start_paragraph_index")
@@ -767,6 +796,9 @@ def extract_prototype_catalog(body_paragraphs: list[dict], style_graph: dict, re
             if predicate(paragraph):
                 return paragraph
         return None
+
+    def first_legal(role: str) -> dict | None:
+        return first_matching(lambda paragraph: legal_semantic_role(str(paragraph.get("text") or "")) == role)
 
     def first_direct_body_matching(predicate: Any) -> dict | None:
         return first_matching(lambda paragraph: is_direct_body_paragraph(paragraph) and predicate(paragraph))
@@ -812,6 +844,9 @@ def extract_prototype_catalog(body_paragraphs: list[dict], style_graph: dict, re
         ("h1", first_heading(1)),
         ("h2", first_heading(2)),
         ("h3", first_heading(3)),
+        ("legal_chuong", first_legal("legal_chuong") or first_heading(1)),
+        ("legal_dieu", first_legal("legal_dieu") or first_heading(2)),
+        ("legal_khoan", first_legal("legal_khoan") or body_prototype),
         ("body", body_prototype),
         ("list", list_prototype),
     ]:
@@ -887,6 +922,7 @@ def main() -> None:
     reference_profile = extract_reference_profile(body_paragraphs, style_graph)
     prototype_catalog = extract_prototype_catalog(body_paragraphs, style_graph, reference_profile, document_profile)
     bookmark_graph = extract_bookmark_graph(body_paragraphs)
+    topology = read_json(run_dir / "topology.json") if (run_dir / "topology.json").exists() else {}
 
     payload = {
         "template_file": str(template_file),
@@ -916,6 +952,7 @@ def main() -> None:
         "field_codes": field_codes,
         "field_graph": field_graph,
         "bookmark_graph": bookmark_graph,
+        "topology": topology,
         "prototype_catalog": prototype_catalog,
         "preserve_defaults": detect_preserve_parts(field_graph, header_results, footer_results, document_profile),
         "reference_profile": reference_profile,
