@@ -1,92 +1,101 @@
-# Task: Tạo report.docx theo contract preserve-template-scaffold
+# Task: Standard DOCX Workflow For This Repo
 
-Mục tiêu là sinh `report.docx` từ `chuong_2.md` nhưng không được đối xử `format_template.docx` như một bộ style rời rạc. File đích phải giữ nguyên scaffold hình thức của template và chỉ thay vùng nội dung chính bằng nội dung Markdown mới.
+Tài liệu này là contract mặc định để agent chạy đúng workflow chuẩn của workspace khi người dùng chỉ đưa prompt ngắn.
 
-## Chế độ thực hiện
+## Mặc định của repo
 
-- `mode`: preserve-template-scaffold
+- `mode`: `preserve-template-scaffold`
+- `source_file`: `chuong_2.md`
 - `template_file`: `format_template.docx`
 - `target_file`: `report.docx`
-- `source_file`: `chuong_2.md`
-- `source_scope`: full-document
+- `run_dir`: `.office-auto/state/<run_id>`
+- `wrapper`: `scripts/build_report.py`
 
-## Thành phần phải giữ
+Nếu người dùng không override file path, agent phải dùng đúng bộ mặc định này.
 
-- Trang bìa hoặc phần mở đầu tương đương.
-- Mục lục.
-- Danh mục hình nếu template đang có.
-- Danh mục bảng nếu template đang có.
-- Header, footer, page number.
-- Section break, margins, page setup, document settings.
-- Styles, numbering và mọi ràng buộc cấu trúc ở cấp template.
+## Mục tiêu
 
-## Thành phần được phép thay
-
-- Vùng nội dung chính của tài liệu, được xác định bằng `replace_ranges` trong `plan.json`.
-- Nếu chưa xác định được `replace_ranges` một cách có căn cứ, agent phải dừng ở trạng thái `blocked`, không được tự ý xóa toàn bộ body.
+- Sinh `report.docx` mới từ `chuong_2.md`.
+- Giữ scaffold của `format_template.docx`, không coi template chỉ là nguồn style.
+- Để lại đầy đủ artifact để có thể truy nguyên từ input normalization tới review cuối.
 
 ## Contract bắt buộc
 
 ```yaml
 mode: preserve-template-scaffold
+source_file: chuong_2.md
 template_file: format_template.docx
 target_file: report.docx
-source_file: chuong_2.md
-source_scope: full-document
-preserve:
-	- cover-page
-	- toc
-	- list-of-figures
-	- list-of-tables
-	- headers-footers
-	- section-breaks
-	- page-number-fields
-	- styles-and-numbering
-replace_ranges:
-	- strategy: after-front-matter-to-end-of-main-story
-		required: true
-post_conditions:
-	- toc-still-present-if-template-had-toc
-	- list-of-figures-still-present-if-template-had-list
-	- headers-footers-preserved
-	- section-breaks-preserved
-	- heading-style-mapped-to-template
-	- numbering-not-duplicated
-	- no-template-body-residue-inside-replaced-range
+wrapper: scripts/build_report.py
+required_artifacts:
+	- preflight.json
+	- pipeline_report.json
+	- run.json
+	- template_preparation_report.json
+	- markitdown_style_map.txt
+	- normalized.md
+	- sample_content.md
+	- content_ast.json
+	- content_outline.json
+	- template_profile.json
+	- plan.json
+	- execution_plan.json
+	- build_report.json
+	- roundtrip_report.json
+	- qa_report.json
+	- review_report.json
+	- review_report.md
+	- review_screen.html
 ```
 
-## Hard gate bắt buộc
+## Trình tự phải đi qua
 
-Agent không được kết luận xong chỉ vì `validate` pass.
+1. `profile_template.py`
+2. `prepare_template_scaffold.py` nếu template quá dày
+3. `profile_template.py` lại nếu đã sinh `effective_template.docx`
+4. `generate_markitdown_style_map.py`
+5. `input_processor.py`
+6. `extract_sample_content.py`
+7. `parse_markdown.py`
+8. `plan_mapping.py`
+9. `compile_execution_plan.py`
+10. `build_docx.py`
+11. `roundtrip_markitdown.py`
+12. `qa_docx.py`
+13. `review_docx.py`
 
-Trước khi bàn giao `report.docx`, agent phải tự chứng minh tất cả các điều sau:
+Không được bỏ qua wrapper để nhảy sang vài lệnh OfficeCLI rời rạc rồi kết luận xong.
 
-1. Scaffold của template vẫn còn, tối thiểu gồm header/footer, section settings và các field mục lục hoặc danh mục nếu template có.
-2. `replace_ranges` đã được resolve bằng artifact, không phải suy đoán tay trong prompt.
-3. Outline của file kết quả khớp outline của `chuong_2.md` theo thứ tự.
-4. Không còn residue của nội dung mẫu cũ bên trong vùng đã thay.
-5. Không có các mẫu lỗi semantic sau trong text extract:
-	 - `CHƯƠNG 1. CHƯƠNG 1`
-	 - `CHƯƠNG 2. CHƯƠNG 2`
-	 - `4.1. 1.1.`
-	 - `5.1. 2.1.`
-6. Không có placeholder hoặc scaffold bị mất rồi được coi là “không quan trọng”.
+## Hard gate
 
-Nếu chưa chứng minh được các điều trên, agent phải coi task là chưa xong.
+Agent không được coi task là xong nếu thiếu một trong các điều sau:
 
-## Quy trình tối thiểu phải đi qua
+1. `replace_ranges` đã `resolved` bằng artifact.
+2. Scaffold của template vẫn còn: header/footer, section settings, TOC hoặc field cấu trúc nếu template có.
+3. `roundtrip_report.json` và `qa_report.json` đã được ghi.
+4. `review_report.json` đã được ghi sau QA và phản ánh `qa_status` cuối.
+5. Không có dấu hiệu duplicate heading pattern hoặc residue template trong vùng đã thay.
+6. Không có placeholder leak bị bỏ qua như lỗi “không quan trọng”.
 
-1. Parse `chuong_2.md` thành `content_ast.json` và `content_outline.json`.
-2. Profile `format_template.docx` để lấy `template_profile.json`, bao gồm scaffold, field, section, heading, numbering và candidate range.
-3. Lập `plan.json` với `preserve`, `replace_ranges`, `post_conditions` và execution strategy.
-4. Build `report.docx` theo bounded replacement, không dùng chiến lược xóa sạch body.
-5. Chạy QA package + structural + range + semantic trước khi finalize.
+## Lệnh chuẩn
+
+```bash
+python scripts/build_report.py \
+	--run-dir .office-auto/state/manual-run \
+	--source-file chuong_2.md \
+	--template-file format_template.docx \
+	--target-file report.docx
+```
+
+Sau khi build xong, lấy nhanh artifact mới nhất bằng:
+
+```bash
+python scripts/latest_review_artifacts.py
+```
 
 ## Kết quả mong muốn
 
-- File đầu ra là `report.docx`.
-- `report.docx` phản ánh đầy đủ nội dung hiện có trong `chuong_2.md` ở vùng nội dung chính.
-- Template tiếp tục giữ scaffold hình thức thay vì chỉ còn vai trò “nguồn style”.
-- File cuối phải có mục lục đã update đủ các chương có trong nội dung version cuối cùng. 
-- File cuối phải validate sạch, không còn placeholder thừa, không mất mục lục hoặc các phần dẫn hướng tương tự nếu template ban đầu có.
-- File cuối không được có duplicate chapter pattern khi copy text thô ra ngoài.
+- `report.docx` phản ánh nội dung của `chuong_2.md` trong vùng nội dung chính.
+- Template vẫn giữ scaffold hình thức.
+- Run để lại đủ artifact để biết rõ fail ở bước nào nếu chưa đạt.
+- Review artifact đủ để agent hoặc người vận hành soi formatting drift mà QA thuần JSON chưa nói hết.

@@ -10,7 +10,7 @@ Dùng file này khi phải chạy nhiều lệnh liên tiếp.
 
 ## Quy tắc batch
 - Gom mutation vào một JSON array duy nhất rồi chạy `officecli batch "$FILE" --input batch.json`.
-- Trong repo này có wrapper: `scripts/run_officecli_batch.py` để chạy batch và ghi `batch_report.json`.
+- Trong flow DOCX hiện tại, batch được gọi nội bộ từ `build_docx.py` qua helper `officecli_batch_commands`; không còn wrapper riêng trong pipeline chính.
 - Batch phù hợp khi command list đã deterministic; resident phù hợp khi cần đọc-kiểm tra-gắn thêm theo vòng lặp.
 
 ## Live preview / watch

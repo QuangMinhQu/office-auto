@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "officecli": {
+      "type": "stdio",
+      "command": "officecli",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

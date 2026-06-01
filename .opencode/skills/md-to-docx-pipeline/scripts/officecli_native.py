@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import tempfile
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -39,22 +40,30 @@ def ensure_officecli_available() -> str:
 def _run_json(*arguments: str) -> dict:
     command = ["officecli", *arguments, "--json"]
     result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        raise OfficeCliError(f"OfficeCLI thất bại với lệnh {' '.join(command)}: {stderr or result.stdout.strip()}")
 
     stdout = result.stdout.strip()
     if not stdout:
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            raise OfficeCliError(f"OfficeCLI thất bại với lệnh {' '.join(command)}: {stderr or result.stdout.strip()}")
         return {"success": True, "data": None}
 
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            raise OfficeCliError(f"OfficeCLI thất bại với lệnh {' '.join(command)}: {stderr or result.stdout.strip()}") from exc
         raise OfficeCliError(f"Không parse được JSON từ OfficeCLI cho lệnh {' '.join(command)}") from exc
 
+    # If only warnings (no actual errors), treat as success regardless of return code
     if payload.get("success") is False:
         error = payload.get("error") or {}
-        message = error.get("error") or payload.get("message") or "OfficeCLI trả về lỗi không xác định."
+        message = error.get("error") or payload.get("message") or ""
+        if not error and not message and payload.get("warnings"):
+            return payload
+        if result.returncode != 0:
+            raise OfficeCliError(f"OfficeCLI thất bại với lệnh {' '.join(command)}: {message}")
         raise OfficeCliError(message)
 
     return payload
@@ -153,10 +162,91 @@ def officecli_batch(document: Path, input_path: Path) -> dict:
     return _run_json("batch", str(document), "--input", str(input_path))
 
 
-def extract_added_path(payload: dict) -> str | None:
-    message = str(payload.get("message") or payload.get("data") or "")
-    match = re.search(r"(/[^\s]+)$", message)
-    return None if match is None else match.group(1)
+def officecli_batch_commands(document: Path, commands: list[dict], *, stop_on_error: bool = True) -> dict:
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+        json.dump(commands, handle, ensure_ascii=False, indent=2)
+        temp_path = Path(handle.name)
+
+    try:
+        arguments = ["batch", str(document), "--input", str(temp_path)]
+        if stop_on_error:
+            arguments.append("--stop-on-error")
+        return _run_json(*arguments)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+def _structured_candidate_paths(value: Any) -> list[str]:
+    matches: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(item, str) and key.lower() in {"path", "newpath", "addedpath", "targetpath", "elementpath", "resultpath"}:
+                if item.startswith("/"):
+                    matches.append(item)
+            matches.extend(_structured_candidate_paths(item))
+        return matches
+
+    if isinstance(value, list):
+        for item in value:
+            matches.extend(_structured_candidate_paths(item))
+        return matches
+
+    return matches
+
+
+def _fallback_candidate_paths(value: Any) -> list[str]:
+    matches: list[str] = []
+    if isinstance(value, dict):
+        for item in value.values():
+            matches.extend(_fallback_candidate_paths(item))
+        return matches
+
+    if isinstance(value, list):
+        for item in value:
+            matches.extend(_fallback_candidate_paths(item))
+        return matches
+
+    if isinstance(value, str):
+        matches.extend(re.findall(r"(/[A-Za-z0-9_\-\[\]\/@=:\.]+)", value))
+    return matches
+
+
+def _path_matches_element(path: str, element_type: str | None) -> bool:
+    if not element_type:
+        return True
+    pattern_map = {
+        "paragraph": r"/p\[(?:\d+|@)",
+        "run": r"/r\[(?:\d+|@)",
+        "bookmark": r"/bookmark",
+        "table": r"/tbl\[(?:\d+|@)",
+        "toc": r"/toc\[(?:\d+|@)",
+    }
+    pattern = pattern_map.get(element_type)
+    return bool(re.search(pattern, path)) if pattern else True
+
+
+def extract_added_path(payload: dict, *, element_type: str | None = None, parent: str | None = None) -> str | None:
+    candidates = []
+    seen: set[str] = set()
+    for path in _structured_candidate_paths(payload):
+        if path not in seen:
+            candidates.append(path)
+            seen.add(path)
+
+    filtered = [
+        path
+        for path in candidates
+        if (parent is None or path.startswith(parent)) and _path_matches_element(path, element_type)
+    ]
+    if filtered:
+        return filtered[-1]
+    for path in _fallback_candidate_paths(payload):
+        if path not in seen:
+            candidates.append(path)
+            seen.add(path)
+    if candidates:
+        return candidates[-1]
+    return None
 
 
 def is_truthy(value: Any) -> bool:

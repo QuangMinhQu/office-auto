@@ -1,7 +1,0 @@
-{
-  "officecli_version": "1.0.100",
-  "mode": "preserve-template-scaffold",
-  "source_file": "/home/minhquang/office-auto/slide_content.md",
-  "template_file": "/home/minhquang/office-auto/format_template.pptx",
-  "target_file": "/home/minhquang/office-auto/report.pptx"
-}

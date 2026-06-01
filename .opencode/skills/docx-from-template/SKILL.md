@@ -93,12 +93,18 @@ Nếu `mode=preserve-template-scaffold`, template không chỉ là nguồn style
 
 ## Execution Contract cho prompt chỉ có `@task.md`
 - Nếu task chỉ cung cấp `task.md`, agent vẫn phải tự dựng đầy đủ artifact và không được bỏ qua phase nào.
+- Nếu prompt chỉ là yêu cầu ngắn kiểu “sinh report.docx mới” hoặc “đọc task.md và làm”, mặc định dùng bộ path chuẩn của repo: `chuong_2.md`, `format_template.docx`, `report.docx`.
+- Đường chạy mặc định là `scripts/build_report.py`; không được thay bằng vài lệnh OfficeCLI rời rạc nếu wrapper vẫn áp dụng được.
 - Với `mode=preserve-template-scaffold`, thứ tự tối thiểu là:
-  1. parse markdown
-  2. profile template
-  3. lập plan
-  4. build file đích
-  5. QA semantic + QA schema
+  1. profile template
+  2. prepare effective template khi cần
+  3. generate style map + normalize input + extract sample content
+  4. parse markdown
+  5. lập plan + compile execution plan
+  6. build file đích
+  7. roundtrip semantic QA
+  8. structural QA
+  9. screen review cuối cùng
 - Không được nhảy từ đọc `task.md` sang gọi một chuỗi lệnh build ad-hoc rồi kết luận xong chỉ dựa trên `validate`.
 
 ## State Machine
@@ -266,6 +272,7 @@ Làm:
 - đóng resident mode nếu có
 - ghi `build_report.json`
 - ghi `qa_report.json`
+- ghi `review_report.json`, `review_report.md`, `review_screen.html` sau khi QA đã hoàn tất
 - cập nhật `run.json`
 
 Output schema:

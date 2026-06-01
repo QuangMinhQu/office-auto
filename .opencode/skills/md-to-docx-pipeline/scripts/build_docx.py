@@ -10,138 +10,134 @@ from officecli_native import (
     OfficeCliError,
     ensure_officecli_available,
     extract_added_path,
-    normalize_text,
     officecli_add,
+    officecli_batch_commands,
     officecli_close,
-    officecli_refresh,
+    officecli_get,
     officecli_open,
     officecli_query,
+    officecli_refresh,
     officecli_remove,
     officecli_save,
     officecli_set,
     officecli_view,
     read_json,
-    to_int,
     write_json,
 )
 
 
-def strip_heading_numbering(text: str) -> str:
-    stripped = text.strip()
-    stripped = re.sub(r"^(?:CHƯƠNG\s+\d+\.?\s*|CHUONG\s+\d+\.?\s*)", "", stripped, flags=re.IGNORECASE)
-    stripped = re.sub(r"^(?:\d+(?:\.\d+)*\.?\s+)", "", stripped)
-    stripped = re.sub(r"^(?:[IVXLCDM]+\.|[A-Z]\.)\s+", "", stripped)
-    return stripped.strip()
+DIRECT_BODY_CHILD_PATTERN = re.compile(r"^/body/(?:p|tbl)\[\d+\]$")
+DIRECT_BODY_PREFIX_PATTERN = re.compile(r"^(/body/(?:p|tbl)\[(\d+)\])(?:/.*)?$")
+DEFAULT_REMOVE_BATCH_CHUNK_SIZE = 200
+DEFAULT_PARAGRAPH_BATCH_CHUNK_SIZE = 40
 
 
-def normalize_heading_text(text: str) -> str:
-    return normalize_text(strip_heading_numbering(text))
+def direct_body_path(path: str | None) -> str | None:
+    if not path:
+        return None
+    match = DIRECT_BODY_PREFIX_PATTERN.match(str(path))
+    return None if match is None else match.group(1)
 
 
-def paragraph_style(block: dict, style_map: dict) -> str:
-    if block.get("type") == "heading":
-        level = int(block.get("level", 1))
-        if level <= 1:
-            return style_map.get("h1", "Heading1")
-        if level == 2:
-            return style_map.get("h2", "Heading2")
-        return style_map.get("h3", "Heading3")
-    if block.get("type") == "reference":
-        return style_map.get("reference", style_map.get("body", "Normal"))
-    if block.get("type") == "list_item":
-        return style_map.get("list", style_map.get("body", "Normal"))
-    return style_map.get("body", "Normal")
+def direct_body_index(path: str | None) -> int | None:
+    if not path:
+        return None
+    match = DIRECT_BODY_PREFIX_PATTERN.match(str(path))
+    return None if match is None else int(match.group(2))
 
 
-def block_text(block: dict) -> str:
-    if block.get("type") == "table_row":
-        return " | ".join(block.get("cells", []))
-    if block.get("type") == "reference":
-        return str(block.get("text", "")).strip()
-    if block.get("type") == "list_item":
-        if block.get("ordered"):
-            return f"{block.get('ordinal', 1)}. {block.get('text', '').strip()}"
-        return f"• {block.get('text', '').strip()}"
-    return str(block.get("text", "")).strip()
+def direct_body_children(document: Path) -> list[str]:
+    text_view = officecli_view(document, "text") or {}
+    return [
+        str(element.get("path"))
+        for element in text_view.get("elements", [])
+        if DIRECT_BODY_CHILD_PATTERN.match(str(element.get("path") or ""))
+    ]
 
 
-def block_runs(block: dict) -> list[dict]:
-    runs = block.get("runs")
-    if isinstance(runs, list) and runs:
-        return [run for run in runs if str(run.get("text", ""))]
-    fallback = block_text(block)
-    return [] if not fallback else [{"text": fallback}]
+def canonical_document_path(document: Path, path: str) -> str:
+    payload = officecli_get(document, path, depth=1) or {}
+    results = payload.get("results", []) if isinstance(payload, dict) else []
+    if results:
+        canonical_path = results[0].get("path")
+        if canonical_path:
+            return str(canonical_path)
+    return path
 
 
-def reference_profile(template_profile: dict) -> dict:
-    payload = template_profile.get("reference_profile")
-    return payload if isinstance(payload, dict) else {}
+def collect_build_blocking_reasons(plan: dict, execution_plan: dict) -> list[str]:
+    reasons: list[str] = []
+    for source in [plan.get("blocking_reasons", []), (plan.get("template_guardrails") or {}).get("blocking_reasons", []), execution_plan.get("blocking_reasons", [])]:
+        for reason in source or []:
+            if reason and reason not in reasons:
+                reasons.append(str(reason))
+    return reasons
 
 
-def heading_bookmark_map(template_profile: dict, replace_range: dict) -> dict[str, list[dict]]:
-    replace_paths = set(replace_range.get("remove_paths", []))
-    bookmark_map: dict[str, list[dict]] = {}
+def prototype_paths_requiring_reservation(execution_plan: dict) -> list[str]:
+    selected_range = execution_plan.get("selected_replace_range", {})
+    remove_paths = selected_range.get("remove_paths", [])
+    first_removed_index = direct_body_index(remove_paths[0]) if remove_paths else None
+    if first_removed_index is None:
+        return []
 
-    for heading in template_profile.get("document_profile", {}).get("headings", []):
-        if replace_paths and heading.get("path") not in replace_paths:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for operation in execution_plan.get("render_ops", []):
+        prototype_path = operation.get("prototype_path")
+        if not prototype_path or prototype_path in seen:
             continue
-        text = str(heading.get("text") or "").strip()
-        bookmarks = heading.get("bookmarks") or []
-        if text and bookmarks:
-            bookmark_map[normalize_heading_text(text)] = bookmarks
-
-    return bookmark_map
-
-
-def run_props(run_info: dict, block: dict | None = None, template_profile: dict | None = None) -> dict:
-    props = {"text": str(run_info.get("text", ""))}
-    reference_format = reference_profile(template_profile or {}) if block and block.get("type") == "reference" else {}
-    if reference_format.get("size"):
-        props["size"] = reference_format["size"]
-    if reference_format.get("font_ascii"):
-        props["font"] = reference_format["font_ascii"]
-    if run_info.get("bold"):
-        props["bold"] = True
-    if run_info.get("italic"):
-        props["italic"] = True
-    if run_info.get("code"):
-        props["font"] = "Courier New"
-    return props
+        prototype_index = direct_body_index(str(prototype_path))
+        if prototype_index is None or prototype_index < first_removed_index:
+            continue
+        candidates.append(str(prototype_path))
+        seen.add(str(prototype_path))
+    return candidates
 
 
-def paragraph_props(block: dict, style_map: dict, template_profile: dict) -> dict:
-    props: dict = {"style": paragraph_style(block, style_map)}
-    if block.get("type") == "list_item":
-        props["listStyle"] = "ordered" if block.get("ordered") else "bullet"
-        level = to_int(block.get("level"))
-        if level is not None and level > 0:
-            props["numLevel"] = level
+def reserve_prototype_paths(document: Path, execution_plan: dict) -> dict[str, str]:
+    prototype_paths = prototype_paths_requiring_reservation(execution_plan)
+    if not prototype_paths:
+        return {}
 
-    if block.get("type") == "reference":
-        reference_format = reference_profile(template_profile)
-        if reference_format.get("style_id"):
-            props["style"] = reference_format["style_id"]
-        if reference_format.get("num_id") is not None:
-            props["numId"] = reference_format["num_id"]
-            if reference_format.get("ilvl") is not None:
-                props["numLevel"] = reference_format["ilvl"]
-        elif reference_format.get("list_style"):
-            props["listStyle"] = reference_format["list_style"]
-        for source_key, target_key in [
-            ("align", "align"),
-            ("space_before", "spaceBefore"),
-            ("space_after", "spaceAfter"),
-            ("line_spacing", "lineSpacing"),
-            ("line_rule", "lineRule"),
-            ("hanging_indent", "hangingIndent"),
-            ("size", "size"),
-            ("font_ascii", "font"),
-        ]:
-            value = reference_format.get(source_key)
-            if value not in (None, ""):
-                props[target_key] = value
- 
-    return props
+    # Try to find body paths using query instead of strict pattern matching
+    try:
+        body_results = officecli_query(document, "paragraph")
+        body_paths = [r.get("path", "") for r in body_results if str(r.get("path", "")).startswith("/body/")]
+    except Exception:
+        body_paths = direct_body_children(document)
+
+    if not body_paths:
+        return {}
+
+    reserved_paths: dict[str, str] = {}
+    reserve_after = body_paths[-1] if body_paths else None
+    for prototype_path in prototype_paths:
+        try:
+            payload = officecli_add(
+                document,
+                "/body",
+                element_type="paragraph",
+                from_path=prototype_path,
+                after=reserve_after,
+            )
+            added_path = extract_added_path(payload, element_type="paragraph", parent="/body")
+            if added_path is not None:
+                reserve_after = added_path
+                reserved_paths[prototype_path] = canonical_document_path(document, added_path)
+        except OfficeCliError:
+            pass
+
+    return reserved_paths
+
+
+def apply_reserved_prototypes(execution_plan: dict, reserved_paths: dict[str, str]) -> None:
+    if not reserved_paths:
+        return
+    for operation in execution_plan.get("render_ops", []):
+        prototype_path = operation.get("prototype_path")
+        if prototype_path in reserved_paths:
+            operation["prototype_path"] = reserved_paths[prototype_path]
 
 
 def add_bookmarks(document: Path, paragraph_path: str, bookmarks: list[dict]) -> None:
@@ -152,35 +148,216 @@ def add_bookmarks(document: Path, paragraph_path: str, bookmarks: list[dict]) ->
         officecli_add(document, paragraph_path, element_type="bookmark", props={"name": name})
 
 
-def add_paragraph(document: Path, anchor_path: str | None, block: dict, style_map: dict, bookmarks: list[dict] | None = None, template_profile: dict | None = None) -> str:
-    runs = block_runs(block)
-    props = paragraph_props(block, style_map, template_profile)
+def should_direct_create_paragraph(operation: dict, *, prefer_direct_create: bool) -> bool:
+    if prefer_direct_create:
+        return True
+    if operation.get("block_type") == "list_item":
+        return True
+    return not bool(operation.get("prototype_path"))
 
-    if len(runs) == 1:
-        props.update(run_props(runs[0], block=block, template_profile=template_profile))
 
-    payload = officecli_add(
-        document,
-        "/body",
-        element_type="paragraph",
-        props=props,
-        after=anchor_path,
-        index=0 if anchor_path is None else None,
+def paragraph_create_props(operation: dict) -> dict:
+    create_props = dict(operation.get("set_props") or {})
+    fallback_style = operation.get("fallback_style")
+    if fallback_style and "style" not in create_props:
+        create_props["style"] = fallback_style
+    return create_props
+
+
+def is_batchable_simple_paragraph(operation: dict, *, prefer_direct_create: bool) -> bool:
+    return (
+        operation.get("kind") == "paragraph"
+        and should_direct_create_paragraph(operation, prefer_direct_create=prefer_direct_create)
+        and not operation.get("append_runs")
+        and not operation.get("bookmarks")
     )
-    paragraph_path = extract_added_path(payload)
+
+
+def batch_add_simple_paragraphs(
+    document: Path,
+    anchor_path: str | None,
+    operations: list[dict],
+    *,
+    chunk_size: int = DEFAULT_PARAGRAPH_BATCH_CHUNK_SIZE,
+) -> tuple[str | None, list[str]]:
+    if not operations:
+        return anchor_path, []
+
+    end_anchor = anchor_path
+    all_document_paths: list[str] = []
+
+    for chunk_end in range(len(operations), 0, -chunk_size):
+        chunk_start = max(0, chunk_end - chunk_size)
+        chunk = operations[chunk_start:chunk_end]
+
+        commands: list[dict] = []
+        for operation in reversed(chunk):
+            command: dict = {
+                "command": "add",
+                "parent": "/body",
+                "type": "paragraph",
+                "props": paragraph_create_props(operation),
+            }
+            if anchor_path is None:
+                command["index"] = 0
+            else:
+                command["after"] = anchor_path
+            commands.append(command)
+
+        payload = officecli_batch_commands(document, commands, stop_on_error=True)
+        batch_data = payload.get("data") if isinstance(payload, dict) and payload.get("data") is not None else payload
+        results = batch_data.get("results", []) if isinstance(batch_data, dict) else []
+        paths_in_command_order: list[str] = []
+        for result in results:
+            path = extract_added_path(result, element_type="paragraph", parent="/body")
+            if path is None:
+                raise ValueError("OfficeCLI batch add paragraph không trả về path mới.")
+            paths_in_command_order.append(path)
+
+        if not paths_in_command_order:
+            continue
+
+        if chunk_end == len(operations):
+            end_anchor = paths_in_command_order[0]
+
+        all_document_paths = list(reversed(paths_in_command_order)) + all_document_paths
+
+    return end_anchor, all_document_paths
+
+
+def render_paragraph(document: Path, anchor_path: str | None, operation: dict, *, prefer_direct_create: bool = False) -> str:
+    prototype_path = operation.get("prototype_path")
+    set_props = dict(operation.get("set_props") or {})
+    fallback_style = operation.get("fallback_style")
+
+    if should_direct_create_paragraph(operation, prefer_direct_create=prefer_direct_create):
+        payload = officecli_add(
+            document,
+            "/body",
+            element_type="paragraph",
+            props=paragraph_create_props(operation),
+            after=anchor_path,
+            index=0 if anchor_path is None else None,
+        )
+    elif prototype_path:
+        try:
+            payload = officecli_add(
+                document,
+                "/body",
+                element_type="paragraph",
+                from_path=str(prototype_path),
+                after=anchor_path,
+                index=0 if anchor_path is None else None,
+            )
+        except OfficeCliError:
+            payload = None
+            if set_props or fallback_style:
+                create_props = dict(set_props)
+                if fallback_style and "style" not in create_props:
+                    create_props["style"] = fallback_style
+                payload = officecli_add(
+                    document,
+                    "/body",
+                    element_type="paragraph",
+                    props=create_props,
+                    after=anchor_path,
+                    index=0 if anchor_path is None else None,
+                )
+    else:
+        create_props = dict(set_props)
+        if fallback_style and "style" not in create_props:
+            create_props["style"] = fallback_style
+        payload = officecli_add(
+            document,
+            "/body",
+            element_type="paragraph",
+            props=create_props,
+            after=anchor_path,
+            index=0 if anchor_path is None else None,
+        )
+
+    paragraph_path = extract_added_path(payload, element_type="paragraph", parent="/body")
     if paragraph_path is None:
         raise ValueError("OfficeCLI add paragraph không trả về path mới.")
 
-    add_bookmarks(document, paragraph_path, bookmarks or [])
+    if prototype_path and set_props:
+        officecli_set(document, paragraph_path, props=set_props)
 
-    if len(runs) > 1:
-        for run in runs:
-            text_value = str(run.get("text") or "")
-            if not text_value:
-                continue
-            officecli_add(document, paragraph_path, element_type="run", props=run_props(run, block=block, template_profile=template_profile))
+    for run in operation.get("append_runs", []):
+        text_value = str(run.get("text") or "")
+        if not text_value:
+            continue
+        officecli_add(document, paragraph_path, element_type="run", props=run)
 
+    add_bookmarks(document, paragraph_path, operation.get("bookmarks", []))
     return paragraph_path
+
+
+def estimate_minimum_officecli_calls(execution_plan: dict, reserved_prototype_count: int, rewritten_toc_count: int = 0) -> int:
+    remove_count = len(execution_plan.get("remove_batch_commands", []))
+    remove_batches = (remove_count + DEFAULT_REMOVE_BATCH_CHUNK_SIZE - 1) // DEFAULT_REMOVE_BATCH_CHUNK_SIZE if remove_count else 0
+    render_ops = execution_plan.get("render_ops", [])
+    paragraph_set_calls = len(
+        [
+            operation
+            for operation in render_ops
+            if operation.get("kind") == "paragraph" and operation.get("prototype_path") and operation.get("set_props")
+        ]
+    )
+    paragraph_add_calls = len([operation for operation in render_ops if operation.get("kind") == "paragraph"])
+    table_add_calls = len([operation for operation in render_ops if operation.get("kind") == "table"])
+    append_run_calls = sum(len(operation.get("append_runs", [])) for operation in render_ops if operation.get("kind") == "paragraph")
+    bookmark_add_calls = sum(len(operation.get("bookmarks", [])) for operation in render_ops if operation.get("kind") == "paragraph")
+    table_cell_set_calls = sum(
+        len(row.get("cells", []))
+        for operation in render_ops
+        if operation.get("kind") == "table"
+        for row in operation.get("rows", [])
+    )
+    reserved_cleanup_calls = reserved_prototype_count
+
+    return (
+        remove_batches
+        + paragraph_add_calls
+        + table_add_calls
+        + paragraph_set_calls
+        + append_run_calls
+        + bookmark_add_calls
+        + table_cell_set_calls
+        + reserved_prototype_count
+        + reserved_cleanup_calls
+        + rewritten_toc_count
+        + 3
+    )
+
+
+def render_table(document: Path, anchor_path: str | None, operation: dict) -> str:
+    payload = officecli_add(
+        document,
+        "/body",
+        element_type="table",
+        props={"rows": operation.get("row_count", 0), "cols": operation.get("column_count", 0)},
+        after=anchor_path,
+        index=0 if anchor_path is None else None,
+    )
+    table_path = extract_added_path(payload, element_type="table", parent="/body")
+    if table_path is None:
+        raise ValueError("OfficeCLI add table không trả về path mới.")
+
+    for row_index, row in enumerate(operation.get("rows", []), start=1):
+        for column_index, cell in enumerate(row.get("cells", []), start=1):
+            props = {"text": str(cell.get("text") or "")}
+            if row.get("header"):
+                props["bold"] = True
+            officecli_set(document, f"{table_path}/tr[{row_index}]/tc[{column_index}]", props=props)
+
+    return table_path
+
+
+def render_operation(document: Path, anchor_path: str | None, operation: dict, *, prefer_direct_create: bool = False) -> str:
+    if operation.get("kind") == "table":
+        return render_table(document, anchor_path, operation)
+    return render_paragraph(document, anchor_path, operation, prefer_direct_create=prefer_direct_create)
 
 
 def rewrite_toc_fields(document: Path) -> list[str]:
@@ -219,69 +396,124 @@ def refresh_fields_if_supported(document: Path, rewritten_tocs: list[str]) -> tu
     return ("officecli-refresh", True)
 
 
-def body_element_count(document: Path) -> int:
-    text_view = officecli_view(document, "text") or {}
-    return len([element for element in text_view.get("elements", []) if str(element.get("path", "")).startswith("/body/")])
+def direct_body_child_count(document: Path) -> int:
+    return len(direct_body_children(document))
 
 
-def replace_body_range(template_file: Path, target_file: Path, blocks: list[dict], style_map: dict, replace_range: dict, template_profile: dict) -> dict:
+def execute_remove_batch(document: Path, execution_plan: dict, chunk_size: int = DEFAULT_REMOVE_BATCH_CHUNK_SIZE) -> dict:
+    commands = execution_plan.get("remove_batch_commands", [])
+    if not commands:
+        return {"summary": {"total": 0, "executed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "chunks": 0}, "results": []}
+
+    total_succeeded = 0
+    total_failed = 0
+    total_chunks = 0
+    all_results = []
+    for i in range(0, len(commands), chunk_size):
+        chunk = commands[i:i + chunk_size]
+        total_chunks += 1
+        try:
+            payload = officecli_batch_commands(document, chunk, stop_on_error=True)
+            batch_data = payload.get("data") if isinstance(payload, dict) and payload.get("data") is not None else payload
+            if isinstance(batch_data, dict):
+                summary = batch_data.get("summary", {})
+                total_succeeded += summary.get("succeeded", len(chunk))
+                total_failed += summary.get("failed", 0)
+                all_results.extend(batch_data.get("results", []))
+            else:
+                total_succeeded += len(chunk)
+        except Exception as exc:
+            total_failed += len(chunk)
+            all_results.append({"error": str(exc)})
+
+    return {"summary": {"total": len(commands), "executed": len(commands), "succeeded": total_succeeded, "failed": total_failed, "skipped": 0, "chunks": total_chunks}, "results": all_results}
+
+
+def resolve_anchor_after_remove(document: Path, original_anchor: str | None) -> str | None:
+    if original_anchor is None:
+        return None
+    try:
+        body_results = officecli_query(document, "paragraph")
+        body_paths = [r.get("path", "") for r in body_results if str(r.get("path", "")).startswith("/body/")]
+        if body_paths:
+            return body_paths[-1]
+    except Exception:
+        pass
+    return original_anchor
+
+
+def execute_plan(template_file: Path, target_file: Path, execution_plan: dict) -> dict:
     shutil.copy2(template_file, target_file)
 
-    before_count = body_element_count(target_file)
-    remove_paths = list(replace_range.get("remove_paths", []))
-    current_anchor = replace_range.get("insert_after_path")
-    heading_bookmarks = heading_bookmark_map(template_profile, replace_range)
-    inserted_paragraph_count = 0
+    before_count = direct_body_child_count(target_file)
+    reserved_prototype_paths = reserve_prototype_paths(target_file, execution_plan)
+    apply_reserved_prototypes(execution_plan, reserved_prototype_paths)
+    remove_batch_result = execute_remove_batch(target_file, execution_plan)
+    if (remove_batch_result.get("summary") or {}).get("failed", 0):
+        raise RuntimeError("Remove batch thất bại; build bị dừng để tránh tài liệu nửa chừng.")
+
+    original_anchor = execution_plan.get("selected_replace_range", {}).get("insert_after_path")
+    current_anchor = resolve_anchor_after_remove(target_file, original_anchor)
     inserted_paths: list[str] = []
-
+    prefer_direct_create = not bool(execution_plan.get("selected_replace_range", {}).get("remove_paths", []))
+    batched_paragraph_count = 0
     officecli_open(target_file)
-    removed_count = 0
-    skipped_count = 0
     try:
-        for path in reversed(remove_paths):
-            try:
-                officecli_remove(target_file, str(path))
-                removed_count += 1
-            except OfficeCliError as e:
-                err_msg = str(e)
-                if "not_found" in err_msg or "Path not found" in err_msg or "No p found" in err_msg:
-                    skipped_count += 1
-                else:
-                    raise
+        batchable_buffer: list[dict] = []
 
-        for block in blocks:
-            text = block_text(block)
-            if not text and block.get("type") != "thematic_break":
+        def flush_batchable_buffer() -> None:
+            nonlocal current_anchor, batched_paragraph_count
+            if not batchable_buffer:
+                return
+            current_anchor, batch_paths = batch_add_simple_paragraphs(target_file, current_anchor, batchable_buffer)
+            inserted_paths.extend(batch_paths)
+            batched_paragraph_count += len(batchable_buffer)
+            batchable_buffer.clear()
+
+        for operation in execution_plan.get("render_ops", []):
+            if is_batchable_simple_paragraph(operation, prefer_direct_create=prefer_direct_create):
+                batchable_buffer.append(operation)
                 continue
 
-            bookmarks = None
-            if block.get("type") == "heading":
-                bookmarks = heading_bookmarks.get(normalize_heading_text(text), [])
-
-            current_anchor = add_paragraph(target_file, current_anchor, block, style_map, bookmarks=bookmarks, template_profile=template_profile)
+            flush_batchable_buffer()
+            current_anchor = render_operation(target_file, current_anchor, operation, prefer_direct_create=prefer_direct_create)
             inserted_paths.append(current_anchor)
-            inserted_paragraph_count += 1
+
+        flush_batchable_buffer()
+
+        for reserved_path in reserved_prototype_paths.values():
+            officecli_remove(target_file, reserved_path)
 
         rewritten_tocs = rewrite_toc_fields(target_file)
         officecli_save(target_file)
     finally:
         officecli_close(target_file)
 
-    after_count = body_element_count(target_file)
+    after_count = direct_body_child_count(target_file)
     refresh_strategy, refreshed = refresh_fields_if_supported(target_file, rewritten_tocs)
     return {
         "body_children_before": before_count,
         "body_children_after": after_count,
-        "replaced_child_count": removed_count,
-        "removed_skipped_count": skipped_count,
-        "inserted_block_count": inserted_paragraph_count,
+        "remove_scope": execution_plan.get("selected_replace_range", {}).get("remove_scope", "direct-body-children"),
+        "replaced_child_count": len(execution_plan.get("remove_batch_commands", [])),
+        "remove_batch_summary": remove_batch_result.get("summary", {}),
+        "inserted_block_count": len(execution_plan.get("render_ops", [])),
         "inserted_paths": inserted_paths,
-        "body_replaced": inserted_paragraph_count > 0,
+        "reserved_prototype_count": len(reserved_prototype_paths),
+        "required_prototype_reservations": len(prototype_paths_requiring_reservation(execution_plan)),
+        "body_replaced": bool(execution_plan.get("render_ops")),
         "dirty_field_count": 0,
         "update_fields_on_open": refreshed,
         "field_refresh_strategy": refresh_strategy,
         "toc_rewrites": rewritten_tocs,
         "resident_mode": True,
+        "prefer_direct_create": prefer_direct_create,
+        "batched_simple_paragraph_ops": batched_paragraph_count,
+        "estimated_minimum_officecli_calls": estimate_minimum_officecli_calls(
+            execution_plan,
+            reserved_prototype_count=len(reserved_prototype_paths),
+            rewritten_toc_count=len(rewritten_tocs),
+        ),
     }
 
 
@@ -294,62 +526,76 @@ def main() -> None:
     plan = read_json(run_dir / "plan.json")
     run_state = read_json(run_dir / "run.json")
     template_profile = read_json(run_dir / "template_profile.json")
-    content_ast = read_json(run_dir / "content_ast.json")
+    execution_plan = read_json(run_dir / "execution_plan.json") if (run_dir / "execution_plan.json").exists() else {"status": "blocked"}
 
-    replace_ranges = plan.get("replace_ranges", [])
-    resolved_range = next((item for item in replace_ranges if item.get("status") == "resolved"), None)
     target_file = Path(plan.get("target_file"))
     template_file = Path(plan.get("template_file"))
     officecli_version = ensure_officecli_available()
+    blocking_reasons = collect_build_blocking_reasons(plan, execution_plan)
+    build_failed = False
 
     if plan.get("mode") != "preserve-template-scaffold":
         build_report = {
             "status": "blocked",
             "mode": plan.get("mode"),
             "target_file": plan.get("target_file"),
-            "message": "Script build hiện chỉ cho phép mode preserve-template-scaffold trong workflow an toàn mới.",
+            "message": "Script build hiện chỉ cho phép mode preserve-template-scaffold trong workflow DOCX an toàn.",
             "body_replaced": False,
             "officecli_version": officecli_version,
         }
         run_state["status"] = "blocked"
-    elif resolved_range is None:
+    elif plan.get("status") != "ready-for-execution" or execution_plan.get("status") != "ready":
         build_report = {
             "status": "blocked",
             "mode": plan.get("mode"),
             "target_file": plan.get("target_file"),
-            "message": "Không resolve được replace_ranges nên build bị chặn để tránh làm mất scaffold của template.",
+            "message": "Build bị chặn do plan hoặc execution graph chưa sẵn sàng an toàn.",
             "body_replaced": False,
             "officecli_version": officecli_version,
+            "blocking_reasons": blocking_reasons,
         }
         run_state["status"] = "blocked"
     else:
-        replacement_stats = replace_body_range(
-            template_file=template_file,
-            target_file=target_file,
-            blocks=content_ast.get("blocks", []),
-            style_map=plan.get("style_map", {}),
-            replace_range=resolved_range,
-            template_profile=template_profile,
-        )
-        build_report = {
-            "status": "completed",
-            "mode": plan.get("mode"),
-            "target_file": plan.get("target_file"),
-            "officecli_version": officecli_version,
-            "replace_range": resolved_range,
-            "preserve": plan.get("preserve", []),
-            "style_map": plan.get("style_map", {}),
-            "template_header_count": template_profile.get("header_count", 0),
-            "template_footer_count": template_profile.get("footer_count", 0),
-            **replacement_stats,
-            "message": "Đã thay vùng nội dung chính theo bounded range bằng OfficeCLI resident mode và giữ scaffold của template ở ngoài phạm vi thay.",
-        }
-        run_state["status"] = "built"
+        try:
+            replacement_stats = execute_plan(template_file=template_file, target_file=target_file, execution_plan=execution_plan)
+            build_report = {
+                "status": "completed",
+                "mode": plan.get("mode"),
+                "target_file": plan.get("target_file"),
+                "officecli_version": officecli_version,
+                "selected_replace_range": execution_plan.get("selected_replace_range"),
+                "preserve": plan.get("preserve", []),
+                "preserve_zones": plan.get("preserve_zones", []),
+                "style_map": plan.get("style_map", {}),
+                "prototype_roles": plan.get("prototype_roles", {}),
+                "render_summary": execution_plan.get("render_summary", {}),
+                "template_header_count": template_profile.get("header_count", 0),
+                "template_footer_count": template_profile.get("footer_count", 0),
+                **replacement_stats,
+                "message": "Đã thực thi execution graph DOCX bằng remove batch trên direct body children và prototype-driven rendering qua OfficeCLI.",
+            }
+            run_state["status"] = "built"
+        except Exception as exc:
+            build_report = {
+                "status": "failed",
+                "mode": plan.get("mode"),
+                "target_file": plan.get("target_file"),
+                "officecli_version": officecli_version,
+                "selected_replace_range": execution_plan.get("selected_replace_range"),
+                "blocking_reasons": blocking_reasons,
+                "body_replaced": False,
+                "message": f"Build DOCX thất bại: {exc}",
+            }
+            run_state["status"] = "failed"
+            build_failed = True
 
-    run_state["artifacts"]["build_report"] = str(run_dir / "build_report.json")
+    run_state.setdefault("artifacts", {})["build_report"] = str(run_dir / "build_report.json")
 
     write_json(run_dir / "build_report.json", build_report)
     write_json(run_dir / "run.json", run_state)
+
+    if build_failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

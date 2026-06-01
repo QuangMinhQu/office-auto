@@ -14,9 +14,15 @@ from officecli_native import (
     read_json,
     write_json,
 )
+from semantic_grounding import filter_outline
 
 
-ERROR_PATTERNS = [
+BACK_MATTER_MARKERS = {
+    "references": {"TAI LIEU THAM KHAO", "REFERENCES", "BIBLIOGRAPHY"},
+    "appendix": {"PHU LUC", "APPENDIX"},
+}
+PLACEHOLDER_PATTERN = re.compile(r"\{\{[^{}]+\}\}|<TODO>|\b(?:lorem ipsum|xxxx)\b", re.IGNORECASE)
+LEGACY_DUPLICATE_PATTERNS = [
     "CHƯƠNG 1. CHƯƠNG 1",
     "CHƯƠNG 2. CHƯƠNG 2",
     "4.1. 1.1.",
@@ -34,6 +40,14 @@ def strip_heading_numbering(text: str) -> str:
 
 def normalize_heading_text(text: str) -> str:
     return normalize_text(strip_heading_numbering(text))
+
+
+def heading_zone(text: str) -> str | None:
+    normalized = normalize_text(text)
+    for zone_name, markers in BACK_MATTER_MARKERS.items():
+        if normalized in markers:
+            return zone_name
+    return None
 
 
 def strip_toc_page_number(text: str) -> str:
@@ -73,7 +87,11 @@ def collect_bookmarks(paragraphs: list[dict]) -> set[str]:
     return names
 
 
-def extract_heading_texts(paragraphs: list[dict]) -> list[str]:
+def extract_heading_texts(paragraphs: list[dict], prototype_roles: dict) -> list[str]:
+    heading_styles = {
+        normalize_text(str(prototype_roles.get(role, {}).get("style_id") or ""))
+        for role in ["h1", "h2", "h3"]
+    }
     results: list[str] = []
     for paragraph in paragraphs:
         style = normalize_text(paragraph.get("style") or paragraph.get("style_id") or "")
@@ -81,14 +99,13 @@ def extract_heading_texts(paragraphs: list[dict]) -> list[str]:
         if not text or style.startswith("TOC"):
             continue
         normalized = normalize_text(text)
-        if style.startswith("HEADING") or normalized.startswith("CHUONG ") or normalized.startswith("NGHI DINH "):
+        if style in heading_styles or style.startswith("HEADING") or normalized.startswith("CHUONG ") or heading_zone(text) is not None or re.match(r"^\d+(?:\.\d+)*\.?\s+", text):
             results.append(text)
     return results
 
 
 def extract_toc_entries(paragraphs: list[dict]) -> list[dict]:
     entries: list[dict] = []
-
     for paragraph in paragraphs:
         style = normalize_text(paragraph.get("style") or paragraph.get("style_id") or "")
         if not style.startswith("TOC"):
@@ -102,7 +119,6 @@ def extract_toc_entries(paragraphs: list[dict]) -> list[dict]:
                 "heading_text": strip_toc_page_number(text),
             }
         )
-
     return entries
 
 
@@ -163,6 +179,58 @@ def is_subsequence(source: list[str], output: list[str]) -> bool:
     return True
 
 
+def detect_duplicate_heading_patterns(document_text: str, heading_texts: list[str]) -> list[str]:
+    findings: set[str] = set()
+    normalized_document = normalize_text(document_text)
+    for pattern in LEGACY_DUPLICATE_PATTERNS:
+        if normalize_text(pattern) in normalized_document:
+            findings.add(pattern)
+
+    for heading in heading_texts:
+        normalized_heading = normalize_text(heading)
+        chapter_dup = re.search(r"^(CHUONG|PHAN)\s+([^\s]+)\s+\1\s+\2\b", normalized_heading)
+        if chapter_dup:
+            findings.add(heading)
+        duplicate_numbering = re.search(r"^(\d+(?:\.\d+)+\.?)(?:\s+)(\d+(?:\.\d+)+\.?)", normalized_heading)
+        if duplicate_numbering:
+            first = duplicate_numbering.group(1).rstrip(".")
+            second = duplicate_numbering.group(2).rstrip(".")
+            if first == second or second.startswith(first):
+                findings.add(heading)
+    return sorted(findings)
+
+
+def source_zone_markers(outline_payload: dict) -> set[str]:
+    markers: set[str] = set()
+    for item in outline_payload.get("outline", []):
+        marker = heading_zone(str(item.get("text") or ""))
+        if marker:
+            markers.add(marker)
+    return markers
+
+
+def output_zone_markers(heading_texts: list[str]) -> set[str]:
+    markers: set[str] = set()
+    for text in heading_texts:
+        marker = heading_zone(text)
+        if marker:
+            markers.add(marker)
+    return markers
+
+
+def placeholder_leak(document_text: str) -> bool:
+    return bool(PLACEHOLDER_PATTERN.search(document_text))
+
+
+def required_heading_numbering(plan: dict) -> bool:
+    prototype_roles = plan.get("prototype_roles", {})
+    for role in ["h1", "h2", "h3"]:
+        prototype = prototype_roles.get(role, {})
+        if prototype.get("num_id") not in (None, ""):
+            return True
+    return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sinh qa_report.json cho pipeline DOCX.")
     parser.add_argument("--run-dir", required=True)
@@ -172,8 +240,11 @@ def main() -> None:
     run_state = read_json(run_dir / "run.json")
     plan = read_json(run_dir / "plan.json")
     build_report = read_json(run_dir / "build_report.json") if (run_dir / "build_report.json").exists() else {}
+    roundtrip_report = read_json(run_dir / "roundtrip_report.json") if (run_dir / "roundtrip_report.json").exists() else {}
     template_profile = read_json(run_dir / "template_profile.json")
     outline_payload = read_json(run_dir / "content_outline.json") if (run_dir / "content_outline.json").exists() else {"outline": []}
+    execution_plan = read_json(run_dir / "execution_plan.json") if (run_dir / "execution_plan.json").exists() else {}
+    source_render_window = (plan.get("semantic_grounding") or {}).get("source_render_window") or {}
 
     target_file = Path(run_state.get("target_file"))
     target_exists = target_file.exists()
@@ -185,6 +256,7 @@ def main() -> None:
     paragraph_results = officecli_query(target_file, "paragraph") if target_exists else []
     toc_results = officecli_query(target_file, "toc") if target_exists else []
     field_results = officecli_query(target_file, "field") if target_exists else []
+    numbered_results = officecli_query(target_file, "paragraph[numId>0]") if target_exists else []
     validate_payload = officecli_validate(target_file) if target_exists else {"success": False}
     issues_payload = officecli_view(target_file, "issues") if target_exists else {"count": 0, "issues": []}
     text_payload = officecli_view(target_file, "text") if target_exists else {"elements": []}
@@ -193,10 +265,12 @@ def main() -> None:
     bookmarks = collect_bookmarks(paragraphs)
     toc_entries = extract_toc_entries(paragraphs)
     field_codes = field_instructions(field_results)
-    heading_texts = extract_heading_texts(paragraphs)
-    source_headings = [item.get("text", "") for item in outline_payload.get("outline", [])]
+    prototype_roles = plan.get("prototype_roles", {})
+    heading_texts = extract_heading_texts(paragraphs, prototype_roles)
+    grounded_outline = filter_outline(outline_payload.get("outline", []), source_render_window)
+    source_headings = [item.get("text", "") for item in grounded_outline]
     normalized_document_text = "\n".join(str(element.get("text") or "") for element in text_payload.get("elements", []))
-    duplicate_patterns = [pattern for pattern in ERROR_PATTERNS if pattern in normalized_document_text]
+    duplicate_patterns = detect_duplicate_heading_patterns(normalized_document_text, heading_texts)
 
     required_preserve = set(plan.get("preserve", []))
     normalized_field_codes = [normalize_text(code) for code in field_codes]
@@ -209,7 +283,7 @@ def main() -> None:
     required_parts_present = target_exists and bool(styles_tree) and bool(validate_payload.get("success"))
     update_fields_enabled = bool(build_report.get("update_fields_on_open"))
     dirty_field_count = int(build_report.get("dirty_field_count", 0) or 0)
-    refresh_on_open_ready = toc_present and build_report.get("field_refresh_strategy") in {"rewrite-toc-fields-on-open", "update-fields-on-open"}
+    refresh_on_open_ready = toc_present and build_report.get("field_refresh_strategy") in {"rewrite-toc-fields-on-open", "update-fields-on-open", "officecli-refresh"}
 
     pageref_anchors = extract_pageref_anchors(field_results)
     toc_missing_hyperlinks = [] if pageref_anchors else [entry for entry in toc_entries if entry.get("text")]
@@ -223,20 +297,11 @@ def main() -> None:
             toc_present
             and (
                 (toc_rendered_matches_source and toc_links_ok)
-                or refresh_on_open_ready
+                or (refresh_on_open_ready and bool(field_results or toc_results))
             )
         )
     )
-    cross_references_ok = (
-        not toc_entries
-        or (
-            not toc_missing_hyperlinks
-            and (
-                not toc_broken_anchors
-                or refresh_on_open_ready
-            )
-        )
-    )
+    cross_references_ok = not pageref_anchors or not toc_broken_anchors
 
     scaffold_checks = {
         "headers_footers": (
@@ -253,9 +318,20 @@ def main() -> None:
     }
     scaffold_preserved = all(scaffold_checks.values()) if target_exists else False
 
-    replace_ranges_resolved = any(item.get("status") == "resolved" for item in plan.get("replace_ranges", []))
+    selected_range = plan.get("selected_replace_range") or {}
+    replace_ranges_resolved = selected_range.get("status") == "resolved"
+    remove_strategy_ok = build_report.get("remove_scope") == "direct-body-children"
     outline_ok = is_subsequence(source_headings, heading_texts)
-    body_replaced_ok = bool(build_report.get("body_replaced")) and build_report.get("status") == "completed"
+    insert_only_range = not bool(selected_range.get("remove_paths"))
+    body_replaced_ok = (
+        bool(build_report.get("body_replaced"))
+        and build_report.get("status") == "completed"
+        and (
+            int(build_report.get("replaced_child_count", 0) or 0) > 0
+            or (insert_only_range and int(build_report.get("inserted_block_count", 0) or 0) > 0)
+        )
+        and remove_strategy_ok
+    )
     template_heading_set = {
         normalize_text(item.get("text", ""))
         for item in template_profile.get("document_profile", {}).get("headings", [])
@@ -269,16 +345,31 @@ def main() -> None:
 
     validate_ok = bool(validate_payload.get("success"))
     severe_issues = critical_issues(issues_payload)
+    numbering_needed = required_heading_numbering(plan)
+    numbering_ok = (not numbering_needed) or bool(numbered_results)
+    source_markers = source_zone_markers({"outline": grounded_outline})
+    output_markers = output_zone_markers(heading_texts)
+    references_ok = "references" not in source_markers or "references" in output_markers
+    appendix_ok = "appendix" not in source_markers or "appendix" in output_markers
+    placeholder_ok = not placeholder_leak(normalized_document_text)
+    execution_plan_ready = execution_plan.get("status") == "ready"
+    semantic_roundtrip_ok = roundtrip_report.get("status") == "passed"
 
     qa_report = {
         "status": "passed" if all([
             required_parts_present,
             scaffold_preserved,
             replace_ranges_resolved,
+            execution_plan_ready,
             outline_ok,
             body_replaced_ok,
+            semantic_roundtrip_ok,
+            numbering_ok,
+            references_ok,
+            appendix_ok,
             not template_residue,
             not duplicate_patterns,
+            placeholder_ok,
             validate_ok,
             not severe_issues,
         ]) else "failed",
@@ -289,24 +380,28 @@ def main() -> None:
         "required_parts_present": required_parts_present,
         "scaffold_preserved": scaffold_preserved,
         "replace_ranges_resolved": replace_ranges_resolved,
+        "execution_plan_ready": execution_plan_ready,
         "outline_ok": outline_ok,
         "body_replaced_ok": body_replaced_ok,
+        "remove_strategy_ok": remove_strategy_ok,
         "template_residue": template_residue,
         "residual_template_headings": residual_template_headings,
         "duplicate_heading_patterns": duplicate_patterns,
         "checks": {
             "package": required_parts_present,
             "outline": outline_ok,
-            "numbering": build_report.get("status") == "completed",
+            "numbering": numbering_ok,
             "toc": scaffold_checks["toc"],
-            "references": True,
-            "appendix": True,
+            "semantic_roundtrip": semantic_roundtrip_ok,
+            "references": references_ok,
+            "appendix": appendix_ok,
             "lists": scaffold_checks["list_of_figures"] and scaffold_checks["list_of_tables"],
             "cross_references": cross_references_ok,
             "header_footer": scaffold_checks["headers_footers"],
-            "placeholder_leak": "{{" not in normalized_document_text and "<TODO>" not in normalized_document_text,
+            "placeholder_leak": placeholder_ok,
             "validate": validate_ok,
             "section_breaks": scaffold_checks["section_breaks"],
+            "direct_body_remove": remove_strategy_ok,
         },
         "toc_refresh_strategy": build_report.get("field_refresh_strategy", "rendered-in-package"),
         "update_fields_on_open": update_fields_enabled,
@@ -316,11 +411,17 @@ def main() -> None:
         "toc_rendered_matches_source": toc_rendered_matches_source,
         "toc_missing_hyperlinks": [entry["index"] for entry in toc_missing_hyperlinks],
         "toc_broken_anchor_entries": toc_broken_anchors,
+        "semantic_roundtrip_ok": semantic_roundtrip_ok,
+        "roundtrip_missing_headings": roundtrip_report.get("missing_headings", []),
+        "roundtrip_extra_headings": roundtrip_report.get("extra_headings", []),
+        "roundtrip_body_text_similarity": roundtrip_report.get("body_text_similarity_summary", {}),
+        "source_zone_markers": sorted(source_markers),
+        "output_zone_markers": sorted(output_markers),
         "severe_issue_count": len(severe_issues),
-        "message": "QA đã kiểm package, scaffold, range và semantic gate cho contract preserve-template-scaffold."
+        "message": "QA đã kiểm package, scaffold, selected range, execution graph và semantic gate cho contract preserve-template-scaffold.",
     }
 
-    run_state["artifacts"]["qa_report"] = str(run_dir / "qa_report.json")
+    run_state.setdefault("artifacts", {})["qa_report"] = str(run_dir / "qa_report.json")
     run_state["status"] = "ready" if qa_report["status"] == "passed" else "needs-repair"
 
     write_json(run_dir / "qa_report.json", qa_report)

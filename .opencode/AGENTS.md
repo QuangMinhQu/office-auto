@@ -32,11 +32,21 @@ officecli --version
 - Ưu tiên skill ngắn, đúng vai trò. Không load full command encyclopedia nếu chưa cần syntax cụ thể.
 - `docx-from-template` = orchestrator.
 - `officecli-docx` = command reference.
-- `md-to-docx-pipeline` = pipeline script/artifact để parse, profile, plan, build, QA ngoài context.
+- `md-to-docx-pipeline` = pipeline script/artifact để normalize input, parse, profile, plan, build, roundtrip, QA và review ngoài context.
 - `docx-qa` = delivery gate cho package QA, structural QA, range QA và semantic QA.
 - Các mode ưu tiên: `preserve-template-scaffold`, `replace-main-content-range`, `fill-declared-placeholders`, `append-structured-section`.
 - `full-regenerate-from-schema` chỉ dùng khi người dùng chấp nhận tái tạo gần như toàn bộ tài liệu.
 - Nếu gặp mode cũ `rebuild-from-template-format`, phải normalize sang `preserve-template-scaffold`.
+
+## Default repo workflow
+- Với repo này, nếu người dùng yêu cầu tạo hoặc cập nhật DOCX nhưng không chỉ rõ path, mặc định dùng:
+	- `source_file=chuong_2.md`
+	- `template_file=format_template.docx`
+	- `target_file=report.docx`
+	- `mode=preserve-template-scaffold`
+- Đường chạy ưu tiên là wrapper `scripts/build_report.py`, không phải chuỗi lệnh OfficeCLI ad-hoc.
+- Sau khi wrapper hoàn tất, dùng `scripts/latest_review_artifacts.py` để lấy summary artifact mới nhất.
+- `review_docx.py` là bước cuối sau QA, không chạy trước `qa_docx.py`.
 
 ## Discipline cho mutation
 - Với mọi mutation nhiều bước, phải chọn một trong hai đường chạy rõ ràng:
@@ -48,7 +58,7 @@ officecli --version
 
 ## Hard Gate cho preserve-template-scaffold
 - Không được finalize chỉ vì `validate pass`.
-- Phải có artifact tối thiểu: `preflight.json`, `content_ast.json`, `content_outline.json`, `template_profile.json`, `plan.json`, `build_report.json`, `qa_report.json`.
+- Phải có artifact tối thiểu: `preflight.json`, `content_ast.json`, `content_outline.json`, `template_profile.json`, `plan.json`, `build_report.json`, `roundtrip_report.json`, `qa_report.json`, `review_report.json`.
 - Phải có bằng chứng scaffold còn nguyên, tối thiểu gồm:
 	- header/footer còn tồn tại và không bị giảm bất thường
 	- section break hoặc section settings vẫn còn
