@@ -16,16 +16,16 @@ license: MIT
 3. `docx-qa`: roundtrip + qa + review
 
 ## Retry contract
-- Primary bat buoc doc artifact status sau moi phase.
-- Neu phase fail, re-dispatch dung subagent voi context bo sung.
-- Khong chot complete neu chua co `qa_report.json` status passed.
+- Primary bắt buộc đọc artifact status sau mỗi phase.
+- Nếu phase fail, re-dispatch đúng subagent với context bổ sung.
+- Không chốt complete nếu chưa có `qa_report.json` status passed.
 
 ## Permission contract
-- Tat ca agents: `mcp_officecli_*: deny`
-- OfficeCLI chi duoc dung qua bash commandline/custom tools wrappers.
+- Tất cả agents: `mcp_officecli_*: deny`
+- OfficeCLI chỉ được dùng qua bash commandline/custom tools wrappers.
 
 ## Session memory
 - Bootstrap context qua:
   - `.opencode/memory/project.md`
   - `.opencode/memory/task_current.md`
-- Cap nhat `task_current.md` sau moi phase de resumable.
+- Cập nhật `task_current.md` sau mỗi phase để resumable/

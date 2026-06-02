@@ -1,0 +1,559 @@
+{
+  "contract_version": "2.0",
+  "mode_requested": "preserve-template-scaffold",
+  "mode": "preserve-template-scaffold",
+  "source_file": "/home/minhquang/office-auto/noidung.md",
+  "template_file": "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "heading_count": 11,
+  "source_heading_count_raw": 11,
+  "style_map": {
+    "h1": "Heading1",
+    "h2": "Heading2",
+    "h3": "Heading3",
+    "body": "Normalstyle",
+    "list": "Heading1",
+    "reference": "ListParagraph",
+    "blockquote": "Normalstyle",
+    "code": "Normalstyle",
+    "legal_chuong": "Heading1",
+    "legal_dieu": "Phan",
+    "legal_khoan": "Heading2"
+  },
+  "prototype_roles": {
+    "h1": {
+      "path": "/body/p[@paraId=003CED1B]",
+      "style_id": "Heading1",
+      "direct_body_path": "/body/p[@paraId=003CED1B]",
+      "fallback_role": "body",
+      "num_id": null,
+      "ilvl": null
+    },
+    "h2": {
+      "path": "/body/p[@paraId=3C60E193]",
+      "style_id": "Heading2",
+      "direct_body_path": "/body/p[@paraId=3C60E193]",
+      "fallback_role": "body",
+      "num_id": null,
+      "ilvl": null
+    },
+    "h3": {
+      "path": "/body/p[@paraId=52C4DE01]",
+      "style_id": "Heading3",
+      "direct_body_path": "/body/p[@paraId=52C4DE01]",
+      "fallback_role": "body",
+      "num_id": null,
+      "ilvl": null
+    },
+    "body": {
+      "path": "/body/p[@paraId=47DD4FDA]",
+      "style_id": "Normalstyle",
+      "direct_body_path": "/body/p[@paraId=47DD4FDA]",
+      "fallback_role": null,
+      "num_id": null,
+      "ilvl": null
+    },
+    "list": {
+      "path": "/body/p[@paraId=051169A1]",
+      "style_id": "Heading1",
+      "direct_body_path": "/body/p[@paraId=051169A1]",
+      "fallback_role": "body",
+      "num_id": 25,
+      "ilvl": null
+    },
+    "legal_chuong": {
+      "path": "/body/p[@paraId=003CED1B]",
+      "style_id": "Heading1",
+      "direct_body_path": "/body/p[@paraId=003CED1B]",
+      "fallback_role": "h1",
+      "num_id": null,
+      "ilvl": null
+    },
+    "legal_khoan": {
+      "path": "/body/p[@paraId=3C60E193]",
+      "style_id": "Heading2",
+      "direct_body_path": "/body/p[@paraId=3C60E193]",
+      "fallback_role": "body",
+      "num_id": null,
+      "ilvl": null
+    },
+    "reference": {
+      "path": "/body/p[@paraId=3F0FE4AF]",
+      "style_id": "ListParagraph",
+      "direct_body_path": "/body/p[@paraId=3F0FE4AF]",
+      "fallback_role": "body",
+      "num_id": 9,
+      "ilvl": null
+    },
+    "blockquote": {
+      "path": "/body/p[@paraId=47DD4FDA]",
+      "style_id": "Normalstyle",
+      "direct_body_path": "/body/p[@paraId=47DD4FDA]",
+      "fallback_role": "body",
+      "num_id": null,
+      "ilvl": null
+    },
+    "code": {
+      "path": "/body/p[@paraId=47DD4FDA]",
+      "style_id": "Normalstyle",
+      "direct_body_path": "/body/p[@paraId=47DD4FDA]",
+      "fallback_role": "body",
+      "num_id": null,
+      "ilvl": null
+    }
+  },
+  "render_roles": {
+    "heading_level_1": "h1",
+    "heading_level_2": "h2",
+    "heading_level_3_plus": "h3",
+    "paragraph": "body",
+    "list_item": "list",
+    "reference": "reference",
+    "blockquote": "blockquote",
+    "code_block": "code",
+    "table": "table",
+    "legal_chapter": "legal_chuong",
+    "legal_article": "legal_dieu",
+    "legal_clause": "legal_khoan"
+  },
+  "has_numbering": true,
+  "preserve": [
+    "cross-references",
+    "headers-footers",
+    "list-of-figures",
+    "page-setup",
+    "section-breaks",
+    "styles-and-numbering",
+    "toc"
+  ],
+  "preserve_zones": [
+    {
+      "name": "front-matter",
+      "paragraph_start_index": 0,
+      "paragraph_end_index": 63,
+      "body_start_path": "/body/p[@paraId=5E9CB3ED]",
+      "body_end_path": "/body/p[@paraId=49349C0D]",
+      "direct_start_path": "/body/p[@paraId=5E9CB3ED]",
+      "direct_end_path": "/body/p[@paraId=49349C0D]"
+    },
+    {
+      "name": "references",
+      "paragraph_start_index": 77,
+      "paragraph_end_index": 78,
+      "body_start_path": "/body/p[@paraId=7FA7A178]",
+      "body_end_path": "/body/p[@paraId=3F0FE4AF]",
+      "direct_start_path": "/body/p[@paraId=7FA7A178]",
+      "direct_end_path": "/body/p[@paraId=3F0FE4AF]"
+    }
+  ],
+  "replace_ranges": [
+    {
+      "name": "after-front-matter-to-end-of-main-story",
+      "status": "resolved",
+      "paragraph_start_index": 64,
+      "paragraph_end_index": 78,
+      "body_start_path": "/body/p[@paraId=04C2E2D0]",
+      "body_end_path": "/body/p[@paraId=3F0FE4AF]",
+      "direct_body_start_path": "/body/p[@paraId=04C2E2D0]",
+      "direct_body_end_path": "/body/p[@paraId=3F0FE4AF]",
+      "remove_paths": [
+        "/body/p[@paraId=04C2E2D0]",
+        "/body/p[@paraId=47DD4FDA]",
+        "/body/p[@paraId=051169A1]",
+        "/body/p[@paraId=05E2D782]",
+        "/body/p[@paraId=3B91656F]",
+        "/body/p[@paraId=4A77C03D]",
+        "/body/p[@paraId=114C20C7]",
+        "/body/p[@paraId=450E8917]",
+        "/body/p[@paraId=15D7D3CD]",
+        "/body/p[@paraId=4C9C80FE]",
+        "/body/p[@paraId=409677A3]",
+        "/body/p[@paraId=37D21BE6]",
+        "/body/p[@paraId=7AFAB967]",
+        "/body/p[@paraId=7FA7A178]",
+        "/body/p[@paraId=3F0FE4AF]"
+      ],
+      "insert_after_path": "/body/p[@paraId=49349C0D]",
+      "remove_scope": "direct-body-children",
+      "preserve_zones": [
+        "front-matter",
+        "references"
+      ],
+      "preserves_front_matter": true
+    },
+    {
+      "name": "after-front-matter-before-references",
+      "status": "resolved",
+      "paragraph_start_index": 64,
+      "paragraph_end_index": 76,
+      "body_start_path": "/body/p[@paraId=04C2E2D0]",
+      "body_end_path": "/body/p[@paraId=7AFAB967]",
+      "direct_body_start_path": "/body/p[@paraId=04C2E2D0]",
+      "direct_body_end_path": "/body/p[@paraId=7AFAB967]",
+      "remove_paths": [
+        "/body/p[@paraId=04C2E2D0]",
+        "/body/p[@paraId=47DD4FDA]",
+        "/body/p[@paraId=051169A1]",
+        "/body/p[@paraId=05E2D782]",
+        "/body/p[@paraId=3B91656F]",
+        "/body/p[@paraId=4A77C03D]",
+        "/body/p[@paraId=114C20C7]",
+        "/body/p[@paraId=450E8917]",
+        "/body/p[@paraId=15D7D3CD]",
+        "/body/p[@paraId=4C9C80FE]",
+        "/body/p[@paraId=409677A3]",
+        "/body/p[@paraId=37D21BE6]",
+        "/body/p[@paraId=7AFAB967]"
+      ],
+      "insert_after_path": "/body/p[@paraId=49349C0D]",
+      "remove_scope": "direct-body-children",
+      "preserve_zones": [
+        "front-matter",
+        "references",
+        "appendix"
+      ],
+      "preserves_front_matter": true
+    }
+  ],
+  "selected_replace_range": {
+    "name": "after-front-matter-to-end-of-main-story",
+    "status": "resolved",
+    "paragraph_start_index": 64,
+    "paragraph_end_index": 78,
+    "body_start_path": "/body/p[@paraId=04C2E2D0]",
+    "body_end_path": "/body/p[@paraId=3F0FE4AF]",
+    "direct_body_start_path": "/body/p[@paraId=04C2E2D0]",
+    "direct_body_end_path": "/body/p[@paraId=3F0FE4AF]",
+    "remove_paths": [
+      "/body/p[@paraId=04C2E2D0]",
+      "/body/p[@paraId=47DD4FDA]",
+      "/body/p[@paraId=051169A1]",
+      "/body/p[@paraId=05E2D782]",
+      "/body/p[@paraId=3B91656F]",
+      "/body/p[@paraId=4A77C03D]",
+      "/body/p[@paraId=114C20C7]",
+      "/body/p[@paraId=450E8917]",
+      "/body/p[@paraId=15D7D3CD]",
+      "/body/p[@paraId=4C9C80FE]",
+      "/body/p[@paraId=409677A3]",
+      "/body/p[@paraId=37D21BE6]",
+      "/body/p[@paraId=7AFAB967]",
+      "/body/p[@paraId=7FA7A178]",
+      "/body/p[@paraId=3F0FE4AF]"
+    ],
+    "insert_after_path": "/body/p[@paraId=49349C0D]",
+    "remove_scope": "direct-body-children",
+    "preserve_zones": [
+      "front-matter",
+      "references"
+    ],
+    "preserves_front_matter": true
+  },
+  "field_dependencies": {
+    "fields": [
+      {
+        "path": "/field[1]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985275 \\h"
+      },
+      {
+        "path": "/field[2]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985276 \\h"
+      },
+      {
+        "path": "/field[3]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985277 \\h"
+      },
+      {
+        "path": "/field[4]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985278 \\h"
+      },
+      {
+        "path": "/field[5]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985279 \\h"
+      },
+      {
+        "path": "/field[6]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985280 \\h"
+      },
+      {
+        "path": "/field[7]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985281 \\h"
+      },
+      {
+        "path": "/field[8]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985282 \\h"
+      },
+      {
+        "path": "/field[9]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985283 \\h"
+      },
+      {
+        "path": "/field[10]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985284 \\h"
+      },
+      {
+        "path": "/field[11]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985285 \\h"
+      },
+      {
+        "path": "/field[12]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985286 \\h"
+      },
+      {
+        "path": "/field[13]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985287 \\h"
+      },
+      {
+        "path": "/field[14]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985288 \\h"
+      },
+      {
+        "path": "/field[15]",
+        "field_type": "pageref",
+        "instruction": "PAGEREF _Toc229985289 \\h"
+      },
+      {
+        "path": "/field[16]",
+        "field_type": "page",
+        "instruction": "PAGE   \\* MERGEFORMAT"
+      },
+      {
+        "path": "/field[17]",
+        "field_type": "page",
+        "instruction": "PAGE   \\* MERGEFORMAT"
+      }
+    ],
+    "toc_nodes": [
+      {
+        "path": "/toc[1]",
+        "instruction": "TOC \\o \"1-3\" \\h \\z \\u  PAGEREF _Toc229985275 \\h",
+        "levels": "1-3",
+        "hyperlinks": true
+      },
+      {
+        "path": "/toc[2]",
+        "instruction": "TOC \\h \\z \\c \"Hình\"  PAGEREF _Toc229985287 \\h",
+        "levels": null,
+        "hyperlinks": true
+      }
+    ],
+    "pageref_anchors": [
+      "_Toc229985275",
+      "_Toc229985276",
+      "_Toc229985277",
+      "_Toc229985278",
+      "_Toc229985279",
+      "_Toc229985280",
+      "_Toc229985281",
+      "_Toc229985282",
+      "_Toc229985283",
+      "_Toc229985284",
+      "_Toc229985285",
+      "_Toc229985286",
+      "_Toc229985287",
+      "_Toc229985288",
+      "_Toc229985289"
+    ],
+    "has_toc": true,
+    "has_list_of_figures": true,
+    "has_list_of_tables": false
+  },
+  "bookmark_dependencies": {
+    "count": 12,
+    "names": [
+      "_Hlk192689521",
+      "_Ref193376291",
+      "_Ref98336324",
+      "_Toc229985275",
+      "_Toc229985276",
+      "_Toc229985277",
+      "_Toc229985278",
+      "_Toc229985279",
+      "_Toc229985283",
+      "_Toc229985285",
+      "_Toc229985286",
+      "_Toc229985287"
+    ],
+    "items": [
+      {
+        "name": "_Toc229985275",
+        "id": "0",
+        "paragraph_path": "/body/p[@paraId=55DA03B3]",
+        "direct_body_path": "/body/p[@paraId=55DA03B3]",
+        "text": "DANH MỤC CÁC KÝ HIỆU, CHỮ VIẾT TẮT"
+      },
+      {
+        "name": "_Toc229985276",
+        "id": "1",
+        "paragraph_path": "/body/p[@paraId=1C3A2D8C]",
+        "direct_body_path": "/body/p[@paraId=1C3A2D8C]",
+        "text": "DANH MỤC CÁC HÌNH VẼ"
+      },
+      {
+        "name": "_Toc229985277",
+        "id": "2",
+        "paragraph_path": "/body/p[@paraId=04C2E2D0]",
+        "direct_body_path": "/body/p[@paraId=04C2E2D0]",
+        "text": "GIỚI THIỆU"
+      },
+      {
+        "name": "_Ref98336324",
+        "id": "3",
+        "paragraph_path": "/body/p[@paraId=04C2E2D0]",
+        "direct_body_path": "/body/p[@paraId=04C2E2D0]",
+        "text": "GIỚI THIỆU"
+      },
+      {
+        "name": "_Toc229985278",
+        "id": "4",
+        "paragraph_path": "/body/p[@paraId=051169A1]",
+        "direct_body_path": "/body/p[@paraId=051169A1]",
+        "text": "CƠ SỞ LÝ THUYẾT"
+      },
+      {
+        "name": "_Toc229985279",
+        "id": "5",
+        "paragraph_path": "/body/p[@paraId=05E2D782]",
+        "direct_body_path": "/body/p[@paraId=05E2D782]",
+        "text": "Tầm quan trọng dữ liệu ảnh huấn luyện trong thị giác máy tính"
+      },
+      {
+        "name": "_Hlk192689521",
+        "id": "6",
+        "paragraph_path": "/body/p[@paraId=3B91656F]",
+        "direct_body_path": "/body/p[@paraId=3B91656F]",
+        "text": "Nội dung..."
+      },
+      {
+        "name": "_Toc229985287",
+        "id": "7",
+        "paragraph_path": "/body/p[@paraId=450E8917]",
+        "direct_body_path": "/body/p[@paraId=450E8917]",
+        "text": "Hình .. Các bước xây dựng mô hình học máy"
+      },
+      {
+        "name": "_Toc229985283",
+        "id": "8",
+        "paragraph_path": "/body/p[@paraId=15D7D3CD]",
+        "direct_body_path": "/body/p[@paraId=15D7D3CD]",
+        "text": "Thu thập dữ liệu ảnh thủ công"
+      },
+      {
+        "name": "_Toc229985285",
+        "id": "9",
+        "paragraph_path": "/body/p[@paraId=37D21BE6]",
+        "direct_body_path": "/body/p[@paraId=37D21BE6]",
+        "text": "KẾT LUẬN"
+      },
+      {
+        "name": "_Toc229985286",
+        "id": "10",
+        "paragraph_path": "/body/p[@paraId=7FA7A178]",
+        "direct_body_path": "/body/p[@paraId=7FA7A178]",
+        "text": "TÀI LIỆU THAM KHẢO"
+      },
+      {
+        "name": "_Ref193376291",
+        "id": "11",
+        "paragraph_path": "/body/p[@paraId=3F0FE4AF]",
+        "direct_body_path": "/body/p[@paraId=3F0FE4AF]",
+        "text": "The comprehensive Vietnamese virtual assistant on VinFast's electric car - vinbigdata, truy cập vào tháng 3 20, 2025, https://vinbigdata.com/en/case-studies/the-comprehensive-vietnamese-virtual-assistant-on-vinfasts-electric-car.html"
+      }
+    ]
+  },
+  "post_conditions": [
+    "headers-footers-preserved",
+    "section-breaks-preserved",
+    "heading-style-mapped-to-template",
+    "prototype-driven-rendering-used-for-paragraph-blocks",
+    "no-template-body-residue-inside-replaced-range",
+    "toc-fields-preserved-or-rewritten-for-refresh",
+    "replace-range-operates-on-direct-body-children"
+  ],
+  "execution_strategy": "officecli-operation-graph",
+  "execution_artifacts": {
+    "template_profile": "/home/minhquang/office-auto/run-docx-002/template_profile.json",
+    "content_ast": "/home/minhquang/office-auto/run-docx-002/content_ast.json",
+    "execution_plan": "/home/minhquang/office-auto/run-docx-002/execution_plan.json"
+  },
+  "template_guardrails": {
+    "direct_body_child_count": 58,
+    "selected_range_remove_count": 15,
+    "selected_range_remove_ratio": 0.2586,
+    "preserve_part_signal_count": 5,
+    "weak_heading_roles": [],
+    "risk_flags": [
+      "requires-structural-preserve"
+    ],
+    "build_allowed": true,
+    "blocking_reasons": []
+  },
+  "semantic_grounding": {
+    "normalized_markdown": "/home/minhquang/office-auto/run-docx-002/normalized.md",
+    "pandoc_style_spec": "/home/minhquang/office-auto/run-docx-002/pandoc_style_spec.json",
+    "sample_content": "/home/minhquang/office-auto/run-docx-002/sample_content.md",
+    "sample_outline": "/home/minhquang/office-auto/run-docx-002/sample_outline.json",
+    "source_render_window": {
+      "strategy": "full-document",
+      "start_block_index": 0,
+      "start_line": 1,
+      "trimmed_prefix_block_count": 0,
+      "shared_cover_signals": [],
+      "matched_prefix_preview": [],
+      "anchor_text": null
+    }
+  },
+  "status": "ready-for-execution",
+  "error_contract": {
+    "blocked_means_do_not_build": true,
+    "builder_must_write_blocked_report": true,
+    "qa_must_fail_if_build_runs_without_selected_resolved_range": true
+  },
+  "planner_diagnostics": {
+    "source_zone_markers": [
+      "references"
+    ],
+    "range_reason": "Chọn full main-story range vì outline nguồn bao phủ toàn bộ vùng nội dung chính.",
+    "replace_range_resolved": true,
+    "selected_range_remove_count": 15,
+    "selected_range_remove_ratio": 0.2586,
+    "risk_flags": [
+      "requires-structural-preserve"
+    ],
+    "source_render_window": {
+      "strategy": "full-document",
+      "start_block_index": 0,
+      "start_line": 1,
+      "trimmed_prefix_block_count": 0,
+      "shared_cover_signals": [],
+      "matched_prefix_preview": [],
+      "anchor_text": null
+    },
+    "style_spec_source": null,
+    "legal_mode_enabled": true
+  },
+  "steps": [
+    "Đọc content_ast.json từ parser token-based",
+    "Dùng sample_content.md trích từ template để nhận diện prefix front matter của source đã được scaffold cover sẵn",
+    "Dùng template_profile.json để resolve style graph, prototype catalog và direct-body replace ranges",
+    "Chọn selected_replace_range theo outline nguồn và preserve zones của template",
+    "Compile execution_plan.json thành operation graph deterministic",
+    "Thực thi remove trực tiếp trên direct body children, sau đó render block bằng prototype phù hợp",
+    "Rewrite TOC field và kiểm QA dependency graph sau build"
+  ],
+  "blocking_reasons": []
+}

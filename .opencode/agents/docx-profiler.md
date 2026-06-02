@@ -7,7 +7,8 @@ permission:
   edit: deny
   mcp_officecli_*: deny
 ---
-Ban chi duoc chay cac buoc profile/pre-build:
+
+Bạn chỉ được chạy các bước profile/pre-build:
 - document_topology_detector.py
 - profile_template.py
 - template_suitability_report.py
@@ -19,4 +20,4 @@ Ban chi duoc chay cac buoc profile/pre-build:
 - plan_mapping.py
 - compile_execution_plan.py
 
-Khong duoc chay build_docx.py hay qa_docx.py trong subagent nay.
+Không được chạy build_docx.py hay qa_docx.py trong subagent này.

@@ -1,0 +1,314 @@
+{
+  "status": "completed",
+  "started_at": "2026-06-02T05:52:22+00:00",
+  "finished_at": "2026-06-02T05:56:21+00:00",
+  "duration_seconds": 238.682,
+  "officecli_version": "1.0.102",
+  "run_dir": "/home/minhquang/office-auto/run-docx-002",
+  "source_file": "/home/minhquang/office-auto/noidung.md",
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "failed_step": null,
+  "steps": [
+    {
+      "script": "document_topology_detector.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/document_topology_detector.py",
+        "--template-file",
+        "/home/minhquang/office-auto/format_template.docx",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:22+00:00",
+      "finished_at": "2026-06-02T05:52:27+00:00",
+      "duration_seconds": 5.084,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "profile_template.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/profile_template.py",
+        "--template-file",
+        "/home/minhquang/office-auto/format_template.docx",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:27+00:00",
+      "finished_at": "2026-06-02T05:52:33+00:00",
+      "duration_seconds": 5.187,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "template_suitability_report.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/template_suitability_report.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:33+00:00",
+      "finished_at": "2026-06-02T05:52:33+00:00",
+      "duration_seconds": 0.12,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "prepare_template_scaffold.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/prepare_template_scaffold.py",
+        "--template-file",
+        "/home/minhquang/office-auto/format_template.docx",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:33+00:00",
+      "finished_at": "2026-06-02T05:52:33+00:00",
+      "duration_seconds": 0.079,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "document_topology_detector.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/document_topology_detector.py",
+        "--template-file",
+        "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:33+00:00",
+      "finished_at": "2026-06-02T05:52:38+00:00",
+      "duration_seconds": 4.96,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "profile_template.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/profile_template.py",
+        "--template-file",
+        "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:38+00:00",
+      "finished_at": "2026-06-02T05:52:43+00:00",
+      "duration_seconds": 5.145,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "template_suitability_report.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/template_suitability_report.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:43+00:00",
+      "finished_at": "2026-06-02T05:52:43+00:00",
+      "duration_seconds": 0.073,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "generate_pandoc_style_map.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/generate_pandoc_style_map.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:43+00:00",
+      "finished_at": "2026-06-02T05:52:43+00:00",
+      "duration_seconds": 0.037,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "input_processor.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/input_processor.py",
+        "--source-file",
+        "/home/minhquang/office-auto/noidung.md",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002",
+        "--style-spec-file",
+        "/home/minhquang/office-auto/run-docx-002/pandoc_style_spec.json"
+      ],
+      "started_at": "2026-06-02T05:52:43+00:00",
+      "finished_at": "2026-06-02T05:52:43+00:00",
+      "duration_seconds": 0.039,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "extract_sample_content.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/extract_sample_content.py",
+        "--sample-file",
+        "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002",
+        "--style-spec-file",
+        "/home/minhquang/office-auto/run-docx-002/pandoc_style_spec.json"
+      ],
+      "started_at": "2026-06-02T05:52:43+00:00",
+      "finished_at": "2026-06-02T05:52:44+00:00",
+      "duration_seconds": 0.893,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "parse_markdown.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/parse_markdown.py",
+        "--source-file",
+        "/home/minhquang/office-auto/run-docx-002/normalized.md",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:44+00:00",
+      "finished_at": "2026-06-02T05:52:44+00:00",
+      "duration_seconds": 0.078,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "plan_mapping.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/plan_mapping.py",
+        "--mode",
+        "preserve-template-scaffold",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002",
+        "--source-file",
+        "/home/minhquang/office-auto/noidung.md",
+        "--template-file",
+        "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+        "--target-file",
+        "/home/minhquang/office-auto/report.docx"
+      ],
+      "started_at": "2026-06-02T05:52:44+00:00",
+      "finished_at": "2026-06-02T05:52:44+00:00",
+      "duration_seconds": 0.086,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "compile_execution_plan.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/compile_execution_plan.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:44+00:00",
+      "finished_at": "2026-06-02T05:52:44+00:00",
+      "duration_seconds": 0.076,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "build_docx.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/build_docx.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:52:44+00:00",
+      "finished_at": "2026-06-02T05:56:07+00:00",
+      "duration_seconds": 202.588,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "post_process_docx.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/post_process_docx.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:56:07+00:00",
+      "finished_at": "2026-06-02T05:56:08+00:00",
+      "duration_seconds": 1.139,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "roundtrip_pandoc.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/roundtrip_pandoc.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002",
+        "--style-spec-file",
+        "/home/minhquang/office-auto/run-docx-002/pandoc_style_spec.json"
+      ],
+      "started_at": "2026-06-02T05:56:08+00:00",
+      "finished_at": "2026-06-02T05:56:09+00:00",
+      "duration_seconds": 0.879,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "qa_docx.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/qa_docx.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:56:09+00:00",
+      "finished_at": "2026-06-02T05:56:14+00:00",
+      "duration_seconds": 5.316,
+      "status": "completed",
+      "returncode": 0
+    },
+    {
+      "script": "review_docx.py",
+      "attempt": 1,
+      "command": [
+        "/home/minhquang/miniconda3/bin/python3",
+        "/home/minhquang/office-auto/.opencode/skills/md-to-docx-pipeline/scripts/review_docx.py",
+        "--run-dir",
+        "/home/minhquang/office-auto/run-docx-002"
+      ],
+      "started_at": "2026-06-02T05:56:14+00:00",
+      "finished_at": "2026-06-02T05:56:21+00:00",
+      "duration_seconds": 6.608,
+      "status": "completed",
+      "returncode": 0
+    }
+  ]
+}

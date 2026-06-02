@@ -1,0 +1,12 @@
+{
+  "officecli_version": "1.0.102",
+  "mode": "preserve-template-scaffold",
+  "source_file": "/home/minhquang/office-auto/noidung.md",
+  "sample_file": "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "source_template_file": "/home/minhquang/office-auto/format_template.docx",
+  "effective_template_file": "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "started_at": "2026-06-02T05:52:22+00:00",
+  "pipeline_report": "/home/minhquang/office-auto/run-docx-002/pipeline_report.json"
+}

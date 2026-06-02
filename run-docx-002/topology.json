@@ -1,0 +1,18 @@
+{
+  "template_file": "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+  "officecli_version": "1.0.102",
+  "has_toc_field": false,
+  "has_pageref": true,
+  "has_bookmarks": false,
+  "has_tables": true,
+  "has_footnotes": false,
+  "has_textboxes": false,
+  "has_comments": false,
+  "has_multiple_sections": true,
+  "section_count": 2,
+  "style_discipline_ratio": 0.4107,
+  "style_discipline_named": 23,
+  "style_discipline_total": 56,
+  "recommended_path": "structural_preserve",
+  "recommended_path_reason": "Document contains cross-reference/section topology that should preserve structure and perform bounded replacement."
+}

@@ -1,0 +1,245 @@
+{
+  "status": "completed",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "source_template_file": "/home/minhquang/office-auto/format_template.docx",
+  "qa_status": "failed",
+  "comparison_baseline": {
+    "file": "/home/minhquang/office-auto/run-docx-002/effective_template.docx",
+    "reason": "Using effective template as visual baseline because the source template contains historical main-story content.",
+    "summary": {
+      "paragraph_count": 79,
+      "section_count": 2,
+      "header_count": 3,
+      "footer_count": 1,
+      "toc_count": 2,
+      "field_count": 17,
+      "top_styles": [
+        {
+          "value": "Normal",
+          "count": 52
+        },
+        {
+          "value": "TOC1",
+          "count": 6
+        },
+        {
+          "value": "TOC2",
+          "count": 4
+        },
+        {
+          "value": "Heading1",
+          "count": 4
+        },
+        {
+          "value": "TableofFigures",
+          "count": 3
+        },
+        {
+          "value": "Normalstyle",
+          "count": 3
+        },
+        {
+          "value": "TOC3",
+          "count": 2
+        },
+        {
+          "value": "Bngbiu-title",
+          "count": 2
+        }
+      ],
+      "top_alignments": [
+        {
+          "value": "(none)",
+          "count": 53
+        },
+        {
+          "value": "justify",
+          "count": 14
+        },
+        {
+          "value": "center",
+          "count": 10
+        },
+        {
+          "value": "right",
+          "count": 2
+        }
+      ],
+      "top_font_sizes": [
+        {
+          "value": "14pt",
+          "count": 62
+        },
+        {
+          "value": "12pt",
+          "count": 15
+        },
+        {
+          "value": "15pt",
+          "count": 1
+        },
+        {
+          "value": "13pt",
+          "count": 1
+        }
+      ],
+      "top_line_spacings": [
+        {
+          "value": "(none)",
+          "count": 64
+        },
+        {
+          "value": "1.5x",
+          "count": 13
+        },
+        {
+          "value": "1.2x",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "target_summary": {
+    "paragraph_count": 127,
+    "section_count": 2,
+    "header_count": 3,
+    "footer_count": 1,
+    "toc_count": 2,
+    "field_count": 28,
+    "top_styles": [
+      {
+        "value": "Normal",
+        "count": 49
+      },
+      {
+        "value": "Normalstyle",
+        "count": 39
+      },
+      {
+        "value": "ListParagraph",
+        "count": 13
+      },
+      {
+        "value": "TOC1",
+        "count": 6
+      },
+      {
+        "value": "Heading2",
+        "count": 6
+      },
+      {
+        "value": "TOC2",
+        "count": 4
+      },
+      {
+        "value": "TableofFigures",
+        "count": 3
+      },
+      {
+        "value": "Heading1",
+        "count": 3
+      }
+    ],
+    "top_alignments": [
+      {
+        "value": "justify",
+        "count": 64
+      },
+      {
+        "value": "(none)",
+        "count": 51
+      },
+      {
+        "value": "center",
+        "count": 10
+      },
+      {
+        "value": "right",
+        "count": 2
+      }
+    ],
+    "top_font_sizes": [
+      {
+        "value": "14pt",
+        "count": 99
+      },
+      {
+        "value": "12pt",
+        "count": 26
+      },
+      {
+        "value": "15pt",
+        "count": 1
+      },
+      {
+        "value": "13pt",
+        "count": 1
+      }
+    ],
+    "top_line_spacings": [
+      {
+        "value": "1.5x",
+        "count": 64
+      },
+      {
+        "value": "(none)",
+        "count": 63
+      }
+    ]
+  },
+  "inserted_paragraph_summary": {
+    "inserted_paragraph_count": 0,
+    "paragraphs_with_differences": 0,
+    "paragraphs_with_attention": 0,
+    "risk_flags": []
+  },
+  "inserted_paragraph_reviews": [],
+  "selected_replace_range": {
+    "name": "after-front-matter-to-end-of-main-story",
+    "status": "resolved",
+    "paragraph_start_index": 64,
+    "paragraph_end_index": 78,
+    "body_start_path": "/body/p[@paraId=04C2E2D0]",
+    "body_end_path": "/body/p[@paraId=3F0FE4AF]",
+    "direct_body_start_path": "/body/p[@paraId=04C2E2D0]",
+    "direct_body_end_path": "/body/p[@paraId=3F0FE4AF]",
+    "remove_paths": [
+      "/body/p[@paraId=04C2E2D0]",
+      "/body/p[@paraId=47DD4FDA]",
+      "/body/p[@paraId=051169A1]",
+      "/body/p[@paraId=05E2D782]",
+      "/body/p[@paraId=3B91656F]",
+      "/body/p[@paraId=4A77C03D]",
+      "/body/p[@paraId=114C20C7]",
+      "/body/p[@paraId=450E8917]",
+      "/body/p[@paraId=15D7D3CD]",
+      "/body/p[@paraId=4C9C80FE]",
+      "/body/p[@paraId=409677A3]",
+      "/body/p[@paraId=37D21BE6]",
+      "/body/p[@paraId=7AFAB967]",
+      "/body/p[@paraId=7FA7A178]",
+      "/body/p[@paraId=3F0FE4AF]"
+    ],
+    "insert_after_path": "/body/p[@paraId=49349C0D]",
+    "remove_scope": "direct-body-children",
+    "preserve_zones": [
+      "front-matter",
+      "references"
+    ],
+    "preserves_front_matter": true
+  },
+  "style_map": {
+    "h1": "Heading1",
+    "h2": "Heading2",
+    "h3": "Heading3",
+    "body": "Normalstyle",
+    "list": "Heading1",
+    "reference": "ListParagraph",
+    "blockquote": "Normalstyle",
+    "code": "Normalstyle",
+    "legal_chuong": "Heading1",
+    "legal_dieu": "Phan",
+    "legal_khoan": "Heading2"
+  },
+  "message": "Review artifact đã so baseline template với output và soi drift formatting trên các paragraph mới được render."
+}

@@ -3,7 +3,7 @@ description: Agent chinh dieu phoi pipeline DOCX, giao task cho subagent va retr
 mode: primary
 model: sglang/Qwen3.6-35B-A3B-GGUF
 temperature: 0.2
-steps: 80
+steps: 200
 permission:
   bash: allow
   edit: allow
@@ -29,6 +29,12 @@ Bạn là orchestrator cho workflow DOCX.
 - Orchestrator phải dispatch subagent owner của pha trước khi tự mình chạy phase đó. Nếu không dispatch, phải có lý do rõ ràng trong output.
 - Không được trộn custom pipeline tool với bash scripts ad-hoc trong cùng pha build/qa.
 
+## Retry Mandate (Bắt buộc)
+- KHÔNG được hỏi user nếu QA chưa passed.
+- KHÔNG được kết thúc session với kết quả "partial success".
+- Nếu qa_report.json status != "passed", BẮT BUỘC phải tự dispatch subagent retry ngay lập tức, 
+  không chờ user confirm.
+- Chỉ hỏi user khi: đã retry ≥3 lần mà vẫn fail với cùng một error.
 
 ## Contract retry
 1. Sau mỗi lần gọi subagent, đọc artifact json của run hiện tại.
