@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import shutil
+from contextlib import contextmanager
 from pathlib import Path
 
 from officecli_native import (
@@ -26,11 +27,21 @@ from officecli_native import (
 )
 
 
-DIRECT_BODY_CHILD_PATTERN = re.compile(r"^/body/(?:p|tbl)\[\d+\]$")
+DIRECT_BODY_CHILD_PATTERN = re.compile(r'^/body/(?:p|tbl)(?:\[\d+\]|\[@paraId=[0-9A-Fa-f]+\])$')
 DIRECT_BODY_PREFIX_PATTERN = re.compile(r"^(/body/(?:p|tbl)\[(\d+)\])(?:/.*)?$")
 DEFAULT_REMOVE_BATCH_CHUNK_SIZE = 200
 DEFAULT_PARAGRAPH_BATCH_CHUNK_SIZE = 40
 
+@contextmanager
+def officecli_document(path):
+    officecli_open(path)
+    try:
+        yield path
+    finally:
+        try:
+            officecli_close(path)
+        except Exception:
+            pass
 
 def direct_body_path(path: str | None) -> str | None:
     if not path:

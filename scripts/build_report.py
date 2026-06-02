@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import json
 import subprocess
+import os
 import sys
 import time
 from pathlib import Path
@@ -126,6 +127,7 @@ def main() -> None:
     parser.add_argument("--target-file", default=str(TARGET))
     parser.add_argument("--mode", default="preserve-template-scaffold")
     args = parser.parse_args()
+    args.run_dir = os.path.abspath(args.run_dir)        # pin absolute path 
 
     run_dir = Path(args.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)

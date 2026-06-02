@@ -18,6 +18,30 @@ type ScriptResult = {
   exitCode: number
 }
 
+function resolveWorkspacePath(worktree: string, inputPath: string): string {
+  if (!inputPath) {
+    return worktree
+  }
+  if (inputPath.startsWith("/")) {
+    return inputPath
+  }
+
+  const segments = worktree.replace(/\/+$/, "").split("/")
+  for (const part of inputPath.split("/")) {
+    if (!part || part === ".") {
+      continue
+    }
+    if (part === "..") {
+      if (segments.length > 1) {
+        segments.pop()
+      }
+      continue
+    }
+    segments.push(part)
+  }
+  return segments.join("/") || "/"
+}
+
 async function runScript(script: string, args: string[], worktree: string): Promise<ScriptResult> {
   const scriptPath = `${worktree}/.opencode/skills/md-to-docx-pipeline/scripts/${script}`
   const py = "python3"
@@ -131,17 +155,22 @@ export const runFullPipeline = tool({
   async execute(args, context) {
     const py = "python3"
     const scriptPath = `${context.worktree}/scripts/build_report.py`
+    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absSourceFile = resolveWorkspacePath(context.worktree, args.source_file)
+    const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
+    const absTargetFile = resolveWorkspacePath(context.worktree, args.target_file)
+
     const command = [
       py,
       scriptPath,
       "--run-dir",
-      args.run_dir,
+      absRunDir,
       "--source-file",
-      args.source_file,
+      absSourceFile,
       "--template-file",
-      args.template_file,
+      absTplFile,
       "--target-file",
-      args.target_file,
+      absTargetFile,
       "--mode",
       args.mode,
     ]
