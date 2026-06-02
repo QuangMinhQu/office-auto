@@ -8,6 +8,7 @@ __pycache__/
 
 # DOCX/PPTX pipeline runtime outputs
 .office-auto/state/
+.office-auto/*.jsonl
 .office-auto/help_*.json
 .office-auto/*_query.json
 .office-auto/*_get.json
@@ -16,6 +17,9 @@ __pycache__/
 .office-auto/template_*.xml
 .office-auto/*.txt
 .office-auto/*.docx
+.manual-run/
+manual-run/
+manual-run-state-summary.md
 
 # Local inspection artifacts
 convert.md

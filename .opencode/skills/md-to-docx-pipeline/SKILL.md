@@ -35,7 +35,7 @@ Không nên thấy:
 - `.office-auto/state/<run_id>/effective_template.docx`
 - `.office-auto/state/<run_id>/normalized.md`
 - `.office-auto/state/<run_id>/input_report.json`
-- `.office-auto/state/<run_id>/markitdown_style_map.txt`
+- `.office-auto/state/<run_id>/pandoc_style_spec.json`
 - `.office-auto/state/<run_id>/sample_content.md`
 - `.office-auto/state/<run_id>/sample_outline.json`
 - `.office-auto/state/<run_id>/sample_content_report.json`
@@ -62,7 +62,7 @@ Không nên thấy:
 5. `scripts/document_topology_detector.py` lại nếu wrapper đã sinh `effective_template.docx`
 6. `scripts/profile_template.py` lại nếu wrapper đã sinh `effective_template.docx`
 7. `scripts/template_suitability_report.py` lại sau profile cập nhật
-8. `scripts/generate_markitdown_style_map.py`
+8. `scripts/generate_pandoc_style_map.py`
 9. `scripts/input_processor.py`
 10. `scripts/extract_sample_content.py`
 11. `scripts/parse_markdown.py`
@@ -70,7 +70,7 @@ Không nên thấy:
 13. `scripts/compile_execution_plan.py`
 14. `scripts/build_docx.py`
 15. `scripts/post_process_docx.py`
-16. `scripts/roundtrip_markitdown.py`
+16. `scripts/roundtrip_pandoc.py`
 17. `scripts/qa_docx.py`
 18. `scripts/review_docx.py`
 
@@ -90,18 +90,18 @@ Không nên thấy:
 - Output: `template_preparation_report.json`, có thể sinh `effective_template.docx`
 - Trách nhiệm: giảm template lịch sử về scaffold mỏng hơn, giữ preserve zones và cache theo content hash.
 
-### `generate_markitdown_style_map.py`
+### `generate_pandoc_style_map.py`
 - Input: `--run-dir`
-- Output: `markitdown_style_map.txt`
-- Trách nhiệm: map Word styles sang semantic Markdown để dùng nhất quán cho input normalization, sample extraction và roundtrip QA.
+- Output: `pandoc_style_spec.json`
+- Trách nhiệm: tổng hợp styleId/styleName của template thành style spec dùng cho semantic grounding và QA metadata.
 
 ### `input_processor.py`
-- Input: `--source-file`, `--run-dir`, `--style-map-file`
+- Input: `--source-file`, `--run-dir`, `--style-spec-file`
 - Output: `normalized.md`
-- Trách nhiệm: normalize đầu vào `.md/.docx/...` thành Markdown thống nhất trước khi parse.
+- Trách nhiệm: normalize đầu vào `.md/.docx/...` thành Markdown thống nhất trước khi parse bằng Pandoc.
 
 ### `extract_sample_content.py`
-- Input: `--sample-file`, `--run-dir`, `--style-map-file`
+- Input: `--sample-file`, `--run-dir`, `--style-spec-file`
 - Output: `sample_content.md`, `sample_outline.json`
 - Trách nhiệm: trích semantic scaffold từ template/sample DOCX để planner có thể trim front matter đã được scaffold cover sẵn.
 
@@ -118,7 +118,7 @@ Không nên thấy:
 ### `compile_execution_plan.py`
 - Input: `--run-dir`
 - Output: `execution_plan.json`
-- Trách nhiệm: compile `plan.json` và `content_ast.json` thành render ops deterministic, có reuse prototype format defaults nhưng không kéo sai cover formatting sang body.
+- Trách nhiệm: compile `plan.json` và `content_ast.json` thành render ops deterministic, có reuse prototype format defaults nhưng không override trực tiếp font/size cho heading roles.
 
 ### `build_docx.py`
 - Input: `--run-dir`
@@ -133,10 +133,10 @@ Không nên thấy:
 - Output: `review_report.json`, `review_report.md`, `review_screen.html`
 - Trách nhiệm: tạo lớp screen review sau QA, so output với template baseline phù hợp và highlight các paragraph mới có drift về style, align, cỡ chữ, font hoặc spacing.
 
-### `roundtrip_markitdown.py`
-- Input: `--run-dir`, `--style-map-file`
+### `roundtrip_pandoc.py`
+- Input: `--run-dir`, `--style-spec-file`
 - Output: `roundtrip.md`, `roundtrip_report.json`
-- Trách nhiệm: convert output DOCX ngược về Markdown, trim cùng semantic window của template scaffold, rồi so semantic heading/table/body text.
+- Trách nhiệm: convert output DOCX ngược về Markdown qua Pandoc, trim cùng semantic window của template scaffold, rồi so semantic heading/table/body text.
 
 ### `qa_docx.py`
 - Input: `--run-dir`

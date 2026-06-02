@@ -24,6 +24,7 @@ STYLE_SPEC_CANDIDATES = [
     "style_spec.json",
     "style-spec.json",
 ]
+LEGAL_ROLE_KEYS = ("legal_chuong", "legal_dieu", "legal_khoan")
 
 
 def read_json(path: Path) -> dict:
@@ -105,12 +106,45 @@ def load_style_spec(run_dir: Path) -> dict:
     return {}
 
 
-def infer_style_map(profile: dict, style_spec: dict | None = None) -> dict:
+def profile_has_explicit_legal_prototypes(profile: dict) -> bool:
+    prototype_catalog = profile.get("prototype_catalog", {})
+    fallback_roles = {
+        "legal_chuong": "h1",
+        "legal_dieu": "h2",
+        "legal_khoan": "body",
+    }
+
+    for role, fallback_role in fallback_roles.items():
+        prototype = prototype_catalog.get(role)
+        if not isinstance(prototype, dict):
+            continue
+        fallback = prototype_catalog.get(fallback_role, {})
+        if prototype.get("path") and prototype.get("path") != fallback.get("path"):
+            return True
+        if prototype.get("style_id") and prototype.get("style_id") != fallback.get("style_id"):
+            return True
+    return False
+
+
+def legal_mode_enabled(profile: dict, style_spec: dict | None = None, content_ast: dict | None = None) -> bool:
+    style_spec = style_spec or {}
+    explicit_map = style_spec.get("style_map") if isinstance(style_spec.get("style_map"), dict) else {}
+    if any(isinstance(explicit_map.get(role), str) and explicit_map.get(role, "").strip() for role in LEGAL_ROLE_KEYS):
+        return True
+    metadata = (content_ast or {}).get("metadata") if isinstance(content_ast, dict) else {}
+    if isinstance(metadata, dict) and metadata.get("legal_structure_detected"):
+        return True
+    return profile_has_explicit_legal_prototypes(profile)
+
+
+def infer_style_map(profile: dict, style_spec: dict | None = None, *, include_legal_roles: bool | None = None) -> dict:
     style_catalog = profile.get("style_catalog", [])
     style_graph = profile.get("style_graph", {})
     prototype_catalog = profile.get("prototype_catalog", {})
     style_spec = style_spec or {}
     explicit_map = style_spec.get("style_map") if isinstance(style_spec.get("style_map"), dict) else {}
+    if include_legal_roles is None:
+        include_legal_roles = legal_mode_enabled(profile, style_spec, None)
 
     def style_from_prototype(role: str, fallback_kind: str, fallback_value: str) -> str:
         prototype = prototype_catalog.get(role, {})
@@ -129,10 +163,16 @@ def infer_style_map(profile: dict, style_spec: dict | None = None) -> dict:
         "reference": reference_style,
         "blockquote": style_from_prototype("blockquote", "body", body_style),
         "code": style_from_prototype("code", "body", body_style),
-        "legal_chuong": style_from_prototype("legal_chuong", "legal_chuong", style_from_prototype("h1", "h1", "Heading1")),
-        "legal_dieu": style_from_prototype("legal_dieu", "legal_dieu", style_from_prototype("h2", "h2", "Heading2")),
-        "legal_khoan": style_from_prototype("legal_khoan", "legal_khoan", body_style),
     }
+
+    if include_legal_roles:
+        style_map.update(
+            {
+                "legal_chuong": style_from_prototype("legal_chuong", "legal_chuong", style_map["h1"]),
+                "legal_dieu": style_from_prototype("legal_dieu", "legal_dieu", style_map["h2"]),
+                "legal_khoan": style_from_prototype("legal_khoan", "legal_khoan", body_style),
+            }
+        )
 
     for role, fallback_roles in {"h1": ["h2", "h3"], "h2": ["h3"]}.items():
         if style_map[role] != body_style:
@@ -143,9 +183,10 @@ def infer_style_map(profile: dict, style_spec: dict | None = None) -> dict:
                 style_map[role] = fallback_style
                 break
 
-    for role, fallback in {"legal_chuong": "h1", "legal_dieu": "h2", "legal_khoan": "body"}.items():
-        if style_map.get(role) in (None, "", "Normal"):
-            style_map[role] = style_map.get(fallback, style_map.get("body", "Normal"))
+    if include_legal_roles:
+        for role, fallback in {"legal_chuong": "h1", "legal_dieu": "h2", "legal_khoan": "body"}.items():
+            if style_map.get(role) in (None, "", "Normal"):
+                style_map[role] = style_map.get(fallback, style_map.get("body", "Normal"))
 
     for role, style_id in explicit_map.items():
         if isinstance(style_id, str) and style_id.strip():
@@ -313,7 +354,8 @@ def main() -> None:
         "heading_count": len(grounded_outline),
         "outline": grounded_outline,
     }
-    style_map = infer_style_map(profile_payload, style_spec)
+    include_legal_roles = legal_mode_enabled(profile_payload, style_spec, content_ast)
+    style_map = infer_style_map(profile_payload, style_spec, include_legal_roles=include_legal_roles)
     normalized_mode = normalize_mode(args.mode)
     preserve_defaults = profile_payload.get("preserve_defaults", [])
     selected_range, range_reason = choose_replace_range(profile_payload, grounded_outline_payload)
@@ -337,9 +379,6 @@ def main() -> None:
         "heading_level_1": "h1",
         "heading_level_2": "h2",
         "heading_level_3_plus": "h3",
-        "legal_chapter": "legal_chuong",
-        "legal_article": "legal_dieu",
-        "legal_clause": "legal_khoan",
         "paragraph": "body",
         "list_item": "list",
         "reference": "reference",
@@ -347,6 +386,14 @@ def main() -> None:
         "code_block": "code",
         "table": "table",
     }
+    if include_legal_roles:
+        render_roles.update(
+            {
+                "legal_chapter": "legal_chuong",
+                "legal_article": "legal_dieu",
+                "legal_clause": "legal_khoan",
+            }
+        )
 
     blocking_reasons = []
     if normalized_mode == "preserve-template-scaffold" and not replace_ranges_resolved:
@@ -392,7 +439,7 @@ def main() -> None:
             key: value
             for key, value in {
                 "normalized_markdown": existing_artifacts.get("normalized_markdown"),
-                "markitdown_style_map": existing_artifacts.get("markitdown_style_map"),
+                "pandoc_style_spec": existing_artifacts.get("pandoc_style_spec"),
                 "sample_content": existing_artifacts.get("sample_content"),
                 "sample_outline": existing_artifacts.get("sample_outline"),
                 "source_render_window": source_render_window,
@@ -414,6 +461,7 @@ def main() -> None:
             "risk_flags": template_guardrails.get("risk_flags", []),
             "source_render_window": source_render_window,
             "style_spec_source": style_spec.get("_source"),
+            "legal_mode_enabled": include_legal_roles,
         },
         "steps": [
             "Đọc content_ast.json từ parser token-based",

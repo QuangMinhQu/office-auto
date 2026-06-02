@@ -24,6 +24,58 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def patch_template_profile(run_dir: Path) -> bool:
+    """Sửa prototype_catalog: TOC1/TOC2/TOC3 → Heading1/Heading2/Heading3.
+
+    Template gốc có thể chứa TOC placeholder paragraphs tại paraId của
+    h1/h2/h3 prototype. Khi profile_template.py đọc những paraId này,
+    style_id sẽ là TOC1/TOC2/TOC3 thay vì Heading1/Heading2/Heading3,
+    khiến plan_mapping ánh xạ sai heading role → QA fail (output_heading_count=0).
+
+    Hàm này sửa template_profile.json sau khi profile_template.py chạy.
+    """
+    tp_path = run_dir / "template_profile.json"
+    if not tp_path.exists():
+        print("[patch_template_profile] template_profile.json không tồn tại, bỏ qua")
+        return True
+
+    with open(tp_path, "r", encoding="utf-8") as f:
+        profile = json.load(f)
+
+    prototype_catalog = profile.get("prototype_catalog", {})
+    changes = 0
+    # Map TOC styles → Heading styles
+    toc_to_heading = {
+        "TOC1": "Heading1",
+        "TOC2": "Heading2",
+        "TOC3": "Heading3",
+        "toc 1": "heading 1",
+        "toc 2": "heading 2",
+        "toc 3": "heading 3",
+    }
+    heading_roles = {"h1", "h2", "h3", "legal_chuong", "legal_dieu", "legal_khoan"}
+    for role in heading_roles:
+        if role not in prototype_catalog:
+            continue
+        pc_entry = prototype_catalog[role]
+        if not isinstance(pc_entry, dict):
+            continue
+        old_style = pc_entry.get("style_id", "")
+        if old_style in toc_to_heading:
+            new_style = toc_to_heading[old_style]
+            pc_entry["style_id"] = new_style
+            changes += 1
+            print(f"[patch_template_profile] {role}: {old_style} → {new_style}")
+
+    if changes > 0:
+        with open(tp_path, "w", encoding="utf-8") as f:
+            json.dump(profile, f, ensure_ascii=False, indent=2)
+        print(f"[patch_template_profile] Đã sửa {changes} prototype entry(s)")
+    else:
+        print("[patch_template_profile] Không cần sửa")
+    return True
+
+
 def run_step(script_name: str, *arguments: str, attempt: int = 1) -> tuple[dict, subprocess.CalledProcessError | None]:
     script_path = PIPELINE / script_name
     command = [sys.executable, str(script_path), *arguments]
@@ -119,6 +171,8 @@ def main() -> None:
         pass
     elif not run_and_record("profile_template.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
         pass
+    elif not patch_template_profile(run_dir):
+        pass
     elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
         pass
     elif not run_and_record(
@@ -137,10 +191,12 @@ def main() -> None:
                 pass
             elif not run_and_record("profile_template.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
                 pass
+            elif not patch_template_profile(run_dir):
+                pass
             elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
                 pass
 
-        if failed_step is None and not run_and_record("generate_markitdown_style_map.py", ["--run-dir", str(run_dir)]):
+        if failed_step is None and not run_and_record("generate_pandoc_style_map.py", ["--run-dir", str(run_dir)]):
             pass
         if failed_step is None and not run_and_record(
             "input_processor.py",
@@ -149,8 +205,8 @@ def main() -> None:
                 args.source_file,
                 "--run-dir",
                 str(run_dir),
-                "--style-map-file",
-                str(run_dir / "markitdown_style_map.txt"),
+                "--style-spec-file",
+                str(run_dir / "pandoc_style_spec.json"),
             ],
         ):
             pass
@@ -165,8 +221,8 @@ def main() -> None:
                     sample_file,
                     "--run-dir",
                     str(run_dir),
-                    "--style-map-file",
-                    str(run_dir / "markitdown_style_map.txt"),
+                    "--style-spec-file",
+                    str(run_dir / "pandoc_style_spec.json"),
                 ],
             ):
                 pass
@@ -195,12 +251,12 @@ def main() -> None:
         if failed_step is None and not run_and_record("post_process_docx.py", ["--run-dir", str(run_dir)]):
             pass
         if failed_step is None and not run_and_record(
-            "roundtrip_markitdown.py",
+            "roundtrip_pandoc.py",
             [
                 "--run-dir",
                 str(run_dir),
-                "--style-map-file",
-                str(run_dir / "markitdown_style_map.txt"),
+                "--style-spec-file",
+                str(run_dir / "pandoc_style_spec.json"),
             ],
         ):
             pass

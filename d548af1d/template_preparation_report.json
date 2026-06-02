@@ -1,0 +1,20 @@
+{
+  "status": "pass-through",
+  "source_template_file": "format_template.docx",
+  "effective_template_file": "d548af1d/effective_template.docx",
+  "selected_candidate": "after-front-matter-to-end-of-main-story",
+  "guardrails": {
+    "direct_body_child_count": 58,
+    "selected_range_remove_count": 15,
+    "selected_range_remove_ratio": 0.2586,
+    "preserve_part_signal_count": 5,
+    "weak_heading_roles": [],
+    "risk_flags": [
+      "requires-structural-preserve"
+    ],
+    "build_allowed": true,
+    "blocking_reasons": []
+  },
+  "strategy": "structural_preserve",
+  "message": "Topology yêu cầu preserve structure; bỏ qua bước thin-scaffold để tránh phá TOC/bookmark/section."
+}

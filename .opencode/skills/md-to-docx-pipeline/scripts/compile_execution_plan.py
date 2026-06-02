@@ -86,6 +86,10 @@ def prefers_justified_body_alignment(role: str) -> bool:
     return role in {"body", "list", "reference", "blockquote", "legal_dieu", "legal_khoan"}
 
 
+def is_heading_role(role: str) -> bool:
+    return role in {"h1", "h2", "h3", "legal_chuong", "legal_dieu"}
+
+
 def paragraph_set_props(block: dict, role: str, style_map: dict, prototype_catalog: dict, first_run: dict | None = None) -> dict:
     props: dict = {}
     prototype = prototype_paragraph_defaults(role, prototype_catalog)
@@ -136,15 +140,16 @@ def paragraph_set_props(block: dict, role: str, style_map: dict, prototype_catal
                 props[target_key] = value
 
     prototype_first_run = next((run for run in prototype.get("runs", []) if str(run.get("text") or "")), {})
-    for source_key, target_key in [
-        ("font_ascii", "font"),
-        ("font_latin", "font"),
-        ("size", "size"),
-        ("color", "color"),
-    ]:
-        value = prototype_first_run.get(source_key)
-        if value not in (None, ""):
-            props.setdefault(target_key, value)
+    if not is_heading_role(role):
+        for source_key, target_key in [
+            ("font_ascii", "font"),
+            ("font_latin", "font"),
+            ("size", "size"),
+            ("color", "color"),
+        ]:
+            value = prototype_first_run.get(source_key)
+            if value not in (None, ""):
+                props.setdefault(target_key, value)
 
     if inherits_emphasis_defaults(role):
         for source_key, target_key in [("bold", "bold"), ("italic", "italic"), ("underline", "underline")]:
@@ -152,15 +157,21 @@ def paragraph_set_props(block: dict, role: str, style_map: dict, prototype_catal
             if value not in (None, ""):
                 props.setdefault(target_key, value)
 
-    for source_key, target_key in [
-        ("font_ascii", "font"),
-        ("font_latin", "font"),
-        ("size", "size"),
-        ("color", "color"),
+    first_run_mapping = [
         ("bold", "bold"),
         ("italic", "italic"),
         ("underline", "underline"),
-    ]:
+    ]
+    if not is_heading_role(role):
+        first_run_mapping = [
+            ("font_ascii", "font"),
+            ("font_latin", "font"),
+            ("size", "size"),
+            ("color", "color"),
+            *first_run_mapping,
+        ]
+
+    for source_key, target_key in first_run_mapping:
         value = (first_run or {}).get(source_key)
         if value not in (None, ""):
             props[target_key] = value
@@ -172,6 +183,7 @@ def run_props(run_info: dict, role: str, prototype_catalog: dict) -> dict:
     prototype_first_run = next((run for run in prototype.get("runs", []) if str(run.get("text") or "")), {})
     props = {"text": str(run_info.get("text", ""))}
     code_role = role == "code"
+    heading_role = is_heading_role(role)
     if run_info.get("bold"):
         props["bold"] = True
     elif inherits_emphasis_defaults(role) and prototype_first_run.get("bold"):
@@ -184,21 +196,21 @@ def run_props(run_info: dict, role: str, prototype_catalog: dict) -> dict:
         props["underline"] = True
     elif inherits_emphasis_defaults(role) and prototype_first_run.get("underline"):
         props["underline"] = prototype_first_run["underline"]
-    if run_info.get("color"):
+    if not heading_role and run_info.get("color"):
         props["color"] = run_info["color"]
-    elif prototype_first_run.get("color"):
+    elif not heading_role and prototype_first_run.get("color"):
         props["color"] = prototype_first_run["color"]
-    if run_info.get("size"):
+    if not heading_role and run_info.get("size"):
         props["size"] = run_info["size"]
-    elif prototype_first_run.get("size"):
+    elif not heading_role and prototype_first_run.get("size"):
         props["size"] = prototype_first_run["size"]
-    if run_info.get("font_ascii"):
+    if not heading_role and run_info.get("font_ascii"):
         props["font"] = run_info["font_ascii"]
-    elif run_info.get("font_latin"):
+    elif not heading_role and run_info.get("font_latin"):
         props["font"] = run_info["font_latin"]
-    elif prototype_first_run.get("font_ascii"):
+    elif not heading_role and prototype_first_run.get("font_ascii"):
         props["font"] = prototype_first_run["font_ascii"]
-    elif prototype_first_run.get("font_latin"):
+    elif not heading_role and prototype_first_run.get("font_latin"):
         props["font"] = prototype_first_run["font_latin"]
     elif code_role:
         props["font"] = "Courier New"

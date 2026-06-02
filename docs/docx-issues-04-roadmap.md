@@ -6,16 +6,16 @@ Workspace này phải đi đến trạng thái: người dùng ném vào nội d
 
 ## Baseline đã chốt hiện tại
 
-1. Input normalization qua `input_processor.py` và MarkItDown đã có mặt trong wrapper chuẩn.
+1. Input normalization qua `input_processor.py` và Pandoc đã có mặt trong wrapper chuẩn.
 2. Semantic grounding qua `sample_content.md` và `sample_outline.json` đã là một phần của đường chạy mặc định.
 3. Wrapper `scripts/build_report.py` đã là entrypoint chuẩn để agent/human đi qua cùng một contract.
-4. `roundtrip_markitdown.py` + `qa_docx.py` là gate xác minh chính thức trước bàn giao.
+4. `roundtrip_pandoc.py` + `qa_docx.py` là gate xác minh chính thức trước bàn giao.
 5. `review_docx.py` là lớp screen review chính thức sau QA.
 6. Workspace đã có `.opencode/AGENTS.md`, `task.md`, `.vscode/mcp.json`, `.vscode/tasks.json` và helper `scripts/latest_review_artifacts.py` để prompt ngắn vẫn đi đúng flow.
 
 ## End-state architecture
 
-1. Input layer: mọi nguồn `.md`, `.docx`, `.pdf`, `.txt`, `.xlsx` được normalize về `normalized.md` bằng [input_processor.py](../.opencode/skills/md-to-docx-pipeline/scripts/input_processor.py) và MarkItDown ở các format phù hợp.
+1. Input layer: mọi nguồn `.md`, `.docx`, `.txt`, `.text` được normalize về `normalized.md` bằng [input_processor.py](../.opencode/skills/md-to-docx-pipeline/scripts/input_processor.py) và Pandoc.
 2. Semantic grounding layer: sample file cùng họ template được convert thành `sample_content.md` và `sample_outline.json` để planner có few-shot semantic anchor.
 3. Planning layer: [plan_mapping.py](../.opencode/skills/md-to-docx-pipeline/scripts/plan_mapping.py) chỉ cho build tiếp khi range thật sự bounded hoặc khi strategy rewrite khác đã được chứng minh an toàn.
 4. Rendering layer: builder có ít mutation hơn, ưu tiên batch hoặc one-pass rewrite ở part-level khi replacement lớn.

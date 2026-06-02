@@ -66,7 +66,9 @@ def run_format_snapshot(run_format: dict) -> dict:
     for source_key, target_key in [
         ("font.latin", "font_latin"),
         ("font.ascii", "font_ascii"),
+        ("font.hAnsi", "font_ascii"),
         ("effective.font.ascii", "font_ascii"),
+        ("effective.font.hAnsi", "font_ascii"),
         ("font.ea", "font_east_asia"),
         ("effective.font.eastAsia", "font_east_asia"),
         ("font.cs", "font_cs"),
@@ -131,7 +133,9 @@ def paragraph_format_snapshot(paragraph_format: dict) -> dict:
         ("size", "size"),
         ("effective.size", "size"),
         ("font.latin", "font_latin"),
+        ("font.hAnsi", "font_ascii"),
         ("effective.font.ascii", "font_ascii"),
+        ("effective.font.hAnsi", "font_ascii"),
         ("font.ea", "font_east_asia"),
         ("effective.font.eastAsia", "font_east_asia"),
         ("color", "color"),
@@ -194,9 +198,17 @@ def extract_style_numbering(body_paragraphs: list[dict]) -> dict:
 def infer_outline_level(style_id: str | None, style_name: str | None) -> str | None:
     normalized = normalize_text(f"{style_id or ''} {style_name or ''}")
     match = re.search(r"HEADING\s*([1-9])", normalized)
-    if match is None:
-        return None
-    return str(int(match.group(1)) - 1)
+    if match is not None:
+        return str(int(match.group(1)) - 1)
+
+    # Vietnamese/custom naming often appears as "Tiêu đề 1" or compact forms.
+    localized_match = re.search(r"(?:TIEU\s*DE|TIEUDE|MUC|PHAN)\s*([1-9])", normalized)
+    if localized_match is not None:
+        return str(int(localized_match.group(1)) - 1)
+
+    if "CHUONG" in normalized:
+        return "0"
+    return None
 
 
 def extract_style_catalog(style_results: list[dict], style_numbering: dict) -> list[dict]:
@@ -844,15 +856,21 @@ def extract_prototype_catalog(body_paragraphs: list[dict], style_graph: dict, re
         ("h1", first_heading(1)),
         ("h2", first_heading(2)),
         ("h3", first_heading(3)),
-        ("legal_chuong", first_legal("legal_chuong") or first_heading(1)),
-        ("legal_dieu", first_legal("legal_dieu") or first_heading(2)),
-        ("legal_khoan", first_legal("legal_khoan") or body_prototype),
         ("body", body_prototype),
         ("list", list_prototype),
     ]:
         if paragraph is None:
             continue
         catalog[role] = prototype_from_paragraph(paragraph, role, fallback_role="body" if role != "body" else None)
+
+    for role, paragraph, fallback_role in [
+        ("legal_chuong", first_legal("legal_chuong"), "h1"),
+        ("legal_dieu", first_legal("legal_dieu"), "h2"),
+        ("legal_khoan", first_legal("legal_khoan"), "body"),
+    ]:
+        if paragraph is None:
+            continue
+        catalog[role] = prototype_from_paragraph(paragraph, role, fallback_role=fallback_role)
 
     if reference_profile:
         catalog["reference"] = reference_profile

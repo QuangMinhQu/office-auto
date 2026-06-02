@@ -1,0 +1,10 @@
+{
+  "status": "completed",
+  "source_file": "noidung.md",
+  "normalized_file": "d548af1d/normalized.md",
+  "source_extension": ".md",
+  "mode": "pass-through",
+  "converter": "none",
+  "style_spec_used": false,
+  "style_spec_file": "d548af1d/pandoc_style_spec.json"
+}

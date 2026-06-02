@@ -1,0 +1,12 @@
+{
+  "officecli_version": "1.0.102",
+  "mode": "preserve-template-scaffold",
+  "source_file": "noidung.md",
+  "sample_file": "d548af1d/effective_template.docx",
+  "template_file": "format_template.docx",
+  "source_template_file": "format_template.docx",
+  "effective_template_file": "d548af1d/effective_template.docx",
+  "target_file": "report.docx",
+  "started_at": "2026-06-01T16:40:11+00:00",
+  "pipeline_report": "d548af1d/pipeline_report.json"
+}

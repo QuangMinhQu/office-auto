@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "orchestrator",
+  "instructions": [
+    ".opencode/AGENTS.md",
+    ".opencode/memory/project.md"
+  ],
+  "permission": {
+    "mcp_officecli_*": "deny"
+  }
+}

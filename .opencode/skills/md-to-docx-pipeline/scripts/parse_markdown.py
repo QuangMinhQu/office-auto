@@ -21,6 +21,11 @@ SECTION_REFERENCE = "references"
 LEGAL_CHAPTER_PATTERN = re.compile(r"^(?:CHƯƠNG|CHUONG)\s+[IVXLCDM\d]+", re.IGNORECASE)
 LEGAL_ARTICLE_PATTERN = re.compile(r"^ĐIỀU\s+\d+", re.IGNORECASE)
 LEGAL_CLAUSE_PATTERN = re.compile(r"^(?:KHOẢN\s+\d+|\d+\.)", re.IGNORECASE)
+LEGAL_ROLE_FALLBACKS = {
+    "legal_chuong": "h1",
+    "legal_dieu": "h2",
+    "legal_khoan": None,
+}
 
 
 def normalize_heading_text(value: str) -> str:
@@ -55,6 +60,60 @@ def detect_legal_semantic_role(text: str, *, heading_level: int | None = None) -
         return "h3"
 
     return None
+
+
+def legal_signal_summary(blocks: list[dict[str, Any]], outline: list[dict[str, Any]]) -> dict[str, Any]:
+    heading_counts = {"legal_chuong": 0, "legal_dieu": 0}
+    clause_count = 0
+
+    for item in outline:
+        role = str(item.get("semantic_role") or "")
+        if role in heading_counts:
+            heading_counts[role] += 1
+
+    for block in blocks:
+        if str(block.get("semantic_role") or "") == "legal_khoan":
+            clause_count += 1
+
+    detected = (
+        (heading_counts["legal_chuong"] >= 1 and heading_counts["legal_dieu"] >= 1)
+        or (heading_counts["legal_dieu"] >= 2)
+        or (heading_counts["legal_dieu"] >= 1 and clause_count >= 2)
+    )
+
+    return {
+        "detected": detected,
+        "heading_counts": heading_counts,
+        "clause_count": clause_count,
+    }
+
+
+def finalize_semantic_roles(blocks: list[dict[str, Any]], outline: list[dict[str, Any]]) -> dict[str, Any]:
+    summary = legal_signal_summary(blocks, outline)
+    if summary["detected"]:
+        return summary
+
+    for block in blocks:
+        role = str(block.get("semantic_role") or "")
+        if role not in LEGAL_ROLE_FALLBACKS:
+            continue
+        fallback = LEGAL_ROLE_FALLBACKS[role]
+        if block.get("type") == "heading":
+            level = int(block.get("level") or 1)
+            block["semantic_role"] = "h1" if level <= 1 else "h2" if level == 2 else "h3"
+        elif fallback is not None:
+            block["semantic_role"] = fallback
+        else:
+            block["semantic_role"] = None
+
+    for item in outline:
+        role = str(item.get("semantic_role") or "")
+        if role not in LEGAL_ROLE_FALLBACKS:
+            continue
+        level = int(item.get("level") or 1)
+        item["semantic_role"] = "h1" if level <= 1 else "h2" if level == 2 else "h3"
+
+    return summary
 
 
 def parser() -> MarkdownIt:
@@ -497,9 +556,14 @@ def parse_markdown_blocks(text: str) -> tuple[list[dict[str, Any]], list[dict[st
 
         index += 1
 
+    legal_summary = finalize_semantic_roles(blocks, outline)
+
     metadata = {
         "parser": "markdown-it-py",
         "section_transitions": section_transitions,
+        "legal_structure_detected": legal_summary["detected"],
+        "legal_heading_counts": legal_summary["heading_counts"],
+        "legal_clause_count": legal_summary["clause_count"],
     }
     return blocks, outline, metadata
 

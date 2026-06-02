@@ -77,9 +77,8 @@ def collect_build_blocking_reasons(plan: dict, execution_plan: dict) -> list[str
 def prototype_paths_requiring_reservation(execution_plan: dict) -> list[str]:
     selected_range = execution_plan.get("selected_replace_range", {})
     remove_paths = selected_range.get("remove_paths", [])
+    remove_path_set = {str(path) for path in remove_paths}
     first_removed_index = direct_body_index(remove_paths[0]) if remove_paths else None
-    if first_removed_index is None:
-        return []
 
     candidates: list[str] = []
     seen: set[str] = set()
@@ -87,7 +86,17 @@ def prototype_paths_requiring_reservation(execution_plan: dict) -> list[str]:
         prototype_path = operation.get("prototype_path")
         if not prototype_path or prototype_path in seen:
             continue
-        prototype_index = direct_body_index(str(prototype_path))
+        prototype_path = str(prototype_path)
+
+        # For paraId-based ranges, reserve when prototype path is explicitly removed.
+        if prototype_path in remove_path_set:
+            candidates.append(prototype_path)
+            seen.add(prototype_path)
+            continue
+
+        prototype_index = direct_body_index(prototype_path)
+        if first_removed_index is None:
+            continue
         if prototype_index is None or prototype_index < first_removed_index:
             continue
         candidates.append(str(prototype_path))

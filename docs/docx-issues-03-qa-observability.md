@@ -23,7 +23,7 @@ Track này đảm bảo mỗi run đều để lại đủ artifact để biết
 ## Hướng xử lý tiếp theo
 
 1. Gắn `risk_flags` từ `plan.json` sang wrapper summary để trước khi build đã thấy run này là `safe`, `warning`, hay `blocked`.
-2. Nếu pipeline hướng đến input user không tin cậy hơn hiện tại, thêm timeout/memory guard cho các bước MarkItDown/Mammoth.
+2. Nếu pipeline hướng đến input user không tin cậy hơn hiện tại, thêm timeout/memory guard cho các bước Pandoc và parser markdown.
 3. Nếu review layer phát hiện drift lặp lại theo pattern, thêm rule-based triage để ưu tiên paragraph đáng ngờ nhất trong `review_report.md`.
 
 ## Definition of done

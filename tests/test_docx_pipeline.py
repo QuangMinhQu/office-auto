@@ -48,6 +48,14 @@ class MarkdownParserTests(unittest.TestCase):
         self.assertEqual(outline[1]["semantic_role"], "legal_dieu")
         self.assertEqual(blocks[2]["semantic_role"], "legal_khoan")
 
+    def test_parse_markdown_demotes_legal_like_heading_without_document_wide_legal_structure(self) -> None:
+        markdown = """# CHƯƠNG 1 TỔNG QUAN\n\nĐây là tài liệu báo cáo thông thường.\n\n## Mục tiêu\n\nNội dung tiếp theo.\n"""
+        _, outline, metadata = parse_markdown.parse_markdown_blocks(markdown)
+
+        self.assertFalse(metadata["legal_structure_detected"])
+        self.assertEqual(outline[0]["semantic_role"], "h1")
+        self.assertEqual(outline[1]["semantic_role"], "h2")
+
 
 class OfficeCliContractTests(unittest.TestCase):
     def test_extract_added_path_prefers_structured_path(self) -> None:
@@ -121,6 +129,22 @@ class PlannerTests(unittest.TestCase):
 
         self.assertEqual(style_map["legal_chuong"], "Chuong")
         self.assertEqual(style_map["legal_dieu"], "Dieu")
+
+    def test_infer_style_map_omits_legal_roles_without_signal(self) -> None:
+        style_map = plan_mapping.infer_style_map(
+            {
+                "style_catalog": [{"style_id": "Normal", "name": "Normal", "default": True}],
+                "style_graph": {},
+                "prototype_catalog": {
+                    "body": {"style_id": "Normal"},
+                    "h1": {"style_id": "Heading1"},
+                    "h2": {"style_id": "Heading2"},
+                },
+            }
+        )
+
+        self.assertNotIn("legal_chuong", style_map)
+        self.assertNotIn("legal_dieu", style_map)
 
     def test_choose_replace_range_prefers_bounded_zone_when_source_has_no_references(self) -> None:
         profile = {

@@ -11,7 +11,8 @@ Tài liệu này là contract mặc định để agent chạy đúng workflow c
 - `run_dir`: `.office-auto/state/<run_id>`
 - `wrapper`: `scripts/build_report.py`
 
-Nếu người dùng không override file path, agent phải dùng đúng bộ mặc định này.
+Nếu người dùng đang yêu cầu workflow build DOCX chuẩn và không override file path, agent mới dùng bộ mặc định này.
+Không được coi `manual-run` hay artifact cũ trong workspace là ngữ cảnh mặc định của session mới.
 
 ## Mục tiêu
 
@@ -34,7 +35,7 @@ required_artifacts:
 	- pipeline_report.json
 	- run.json
 	- template_preparation_report.json
-	- markitdown_style_map.txt
+	- pandoc_style_spec.json
 	- normalized.md
 	- sample_content.md
 	- content_ast.json
@@ -59,7 +60,7 @@ required_artifacts:
 5. `document_topology_detector.py` lại nếu đã sinh `effective_template.docx`
 6. `profile_template.py` lại nếu đã sinh `effective_template.docx`
 7. `template_suitability_report.py` lại sau profile cập nhật
-8. `generate_markitdown_style_map.py`
+8. `generate_pandoc_style_map.py`
 9. `input_processor.py`
 10. `extract_sample_content.py`
 11. `parse_markdown.py`
@@ -67,7 +68,7 @@ required_artifacts:
 13. `compile_execution_plan.py`
 14. `build_docx.py`
 15. `post_process_docx.py`
-16. `roundtrip_markitdown.py`
+16. `roundtrip_pandoc.py`
 17. `qa_docx.py`
 18. `review_docx.py`
 
@@ -88,7 +89,7 @@ Agent không được coi task là xong nếu thiếu một trong các điều s
 
 ```bash
 python scripts/build_report.py \
-	--run-dir .office-auto/state/manual-run \
+	--run-dir .office-auto/state/<run_id> \
 	--source-file noidung.md \
 	--template-file format_template.docx \
 	--target-file report.docx
@@ -106,3 +107,4 @@ python scripts/latest_review_artifacts.py
 - Template vẫn giữ scaffold hình thức.
 - Run để lại đủ artifact để biết rõ fail ở bước nào nếu chưa đạt.
 - Review artifact đủ để agent hoặc người vận hành soi formatting drift mà QA thuần JSON chưa nói hết.
+- Session mới không bị kéo lệch bởi artifact hoặc metadata của run cũ.

@@ -41,6 +41,7 @@
         "source_template_profile": {"type": "string"},
         "template_preparation_report": {"type": "string"},
         "effective_template": {"type": "string"},
+        "pandoc_style_spec": {"type": "string"},
         "markitdown_style_map": {"type": "string"},
         "normalized_markdown": {"type": "string"},
         "input_report": {"type": "string"},
