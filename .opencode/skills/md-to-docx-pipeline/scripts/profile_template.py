@@ -32,6 +32,11 @@ LEGAL_CLAUSE_PATTERN = re.compile(r"^(?:KHOẢN\s+\d+|\d+\.)", re.IGNORECASE)
 
 
 def looks_like_heading_style(style: str | None) -> bool:
+    """LEGACY heuristic used by the fallback planner path.
+
+    Target architecture moves heading-style reasoning to the LLM after
+    `docx_inspect_raw.py` exposes raw template evidence.
+    """
     if not style:
         return False
     normalized = normalize_text(style)
@@ -196,6 +201,10 @@ def extract_style_numbering(body_paragraphs: list[dict]) -> dict:
 
 
 def infer_outline_level(style_id: str | None, style_name: str | None) -> str | None:
+    """LEGACY heuristic for deriving outline levels from localized style names.
+
+    Keep until the `execution_ops.json` path becomes the default planning flow.
+    """
     normalized = normalize_text(f"{style_id or ''} {style_name or ''}")
     match = re.search(r"HEADING\s*([1-9])", normalized)
     if match is not None:
@@ -370,6 +379,11 @@ def zone_marker(text: str) -> str | None:
 
 
 def guess_heading_level(paragraph: dict, style_graph: dict) -> int | None:
+    """LEGACY heuristic classifier for the old Python planner path.
+
+    The LLM-friendly path should infer heading roles from raw inspection output
+    and source markdown instead of relying on this helper.
+    """
     style_id = paragraph.get("style_id")
     if style_id and style_id in style_graph:
         resolved_outline = style_graph[style_id].get("resolved_outline_level")
@@ -395,6 +409,7 @@ def guess_heading_level(paragraph: dict, style_graph: dict) -> int | None:
 
 
 def is_heading_paragraph(paragraph: dict, style_graph: dict) -> bool:
+    """LEGACY boolean wrapper around `guess_heading_level()` for fallback mode."""
     return guess_heading_level(paragraph, style_graph) is not None
 
 

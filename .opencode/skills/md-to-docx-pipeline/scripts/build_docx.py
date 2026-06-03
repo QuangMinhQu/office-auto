@@ -31,6 +31,7 @@ DIRECT_BODY_CHILD_PATTERN = re.compile(r'^/body/(?:p|tbl)(?:\[\d+\]|\[@paraId=[0
 DIRECT_BODY_PREFIX_PATTERN = re.compile(r"^(/body/(?:p|tbl)\[(\d+)\])(?:/.*)?$")
 DEFAULT_REMOVE_BATCH_CHUNK_SIZE = 200
 DEFAULT_PARAGRAPH_BATCH_CHUNK_SIZE = 40
+SEQUENTIAL_ANCHORS = {None, "", "previous", "selected_replace_range", "selected_replace_range.insert_after_path"}
 
 @contextmanager
 def officecli_document(path):
@@ -184,13 +185,27 @@ def paragraph_create_props(operation: dict) -> dict:
     return create_props
 
 
+def uses_sequential_anchor(operation: dict) -> bool:
+    return operation.get("anchor") in SEQUENTIAL_ANCHORS
+
+
 def is_batchable_simple_paragraph(operation: dict, *, prefer_direct_create: bool) -> bool:
     return (
         operation.get("kind") == "paragraph"
         and should_direct_create_paragraph(operation, prefer_direct_create=prefer_direct_create)
+        and uses_sequential_anchor(operation)
         and not operation.get("append_runs")
         and not operation.get("bookmarks")
     )
+
+
+def resolve_operation_anchor(operation: dict, current_anchor: str | None, range_anchor: str | None) -> str | None:
+    anchor = operation.get("anchor")
+    if anchor in {None, "", "previous"}:
+        return current_anchor
+    if anchor in {"selected_replace_range", "selected_replace_range.insert_after_path"}:
+        return range_anchor
+    return str(anchor)
 
 
 def batch_add_simple_paragraphs(
@@ -474,6 +489,7 @@ def execute_plan(template_file: Path, target_file: Path, execution_plan: dict) -
 
     original_anchor = execution_plan.get("selected_replace_range", {}).get("insert_after_path")
     current_anchor = resolve_anchor_after_remove(target_file, original_anchor)
+    range_anchor = current_anchor
     inserted_paths: list[str] = []
     prefer_direct_create = not bool(execution_plan.get("selected_replace_range", {}).get("remove_paths", []))
     batched_paragraph_count = 0
@@ -496,7 +512,8 @@ def execute_plan(template_file: Path, target_file: Path, execution_plan: dict) -
                 continue
 
             flush_batchable_buffer()
-            current_anchor = render_operation(target_file, current_anchor, operation, prefer_direct_create=prefer_direct_create)
+            operation_anchor = resolve_operation_anchor(operation, current_anchor, range_anchor)
+            current_anchor = render_operation(target_file, operation_anchor, operation, prefer_direct_create=prefer_direct_create)
             inserted_paths.append(current_anchor)
 
         flush_batchable_buffer()
@@ -545,7 +562,8 @@ def main() -> None:
     run_dir = Path(args.run_dir)
     plan = read_json(run_dir / "plan.json")
     run_state = read_json(run_dir / "run.json")
-    template_profile = read_json(run_dir / "template_profile.json")
+    template_profile = read_json(run_dir / "template_profile.json") if (run_dir / "template_profile.json").exists() else {}
+    template_inspection = read_json(run_dir / "template_inspection_raw.json") if (run_dir / "template_inspection_raw.json").exists() else {}
     execution_plan = read_json(run_dir / "execution_plan.json") if (run_dir / "execution_plan.json").exists() else {"status": "blocked"}
 
     target_file = Path(plan.get("target_file"))
@@ -589,8 +607,8 @@ def main() -> None:
                 "style_map": plan.get("style_map", {}),
                 "prototype_roles": plan.get("prototype_roles", {}),
                 "render_summary": execution_plan.get("render_summary", {}),
-                "template_header_count": template_profile.get("header_count", 0),
-                "template_footer_count": template_profile.get("footer_count", 0),
+                "template_header_count": template_profile.get("header_count", template_inspection.get("counts", {}).get("headers", 0)),
+                "template_footer_count": template_profile.get("footer_count", template_inspection.get("counts", {}).get("footers", 0)),
                 **replacement_stats,
                 "message": "Đã thực thi execution graph DOCX bằng remove batch trên direct body children và prototype-driven rendering qua OfficeCLI.",
             }

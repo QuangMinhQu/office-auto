@@ -126,6 +126,7 @@ def main() -> None:
     parser.add_argument("--template-file", default=str(TEMPLATE))
     parser.add_argument("--target-file", default=str(TARGET))
     parser.add_argument("--mode", default="preserve-template-scaffold")
+    parser.add_argument("--ops-file", default=None)
     args = parser.parse_args()
     args.run_dir = os.path.abspath(args.run_dir)        # pin absolute path 
 
@@ -169,7 +170,83 @@ def main() -> None:
             return False
         return False
 
-    if not run_and_record("document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+    if args.ops_file:
+        if not run_and_record("document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+            pass
+        elif not run_and_record("docx_inspect_raw.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+            pass
+        else:
+            sample_file = args.sample_file or args.template_file
+            preflight["sample_file"] = sample_file
+            write_json(run_dir / "preflight.json", preflight)
+            if failed_step is None and not run_and_record(
+                "input_processor.py",
+                [
+                    "--source-file",
+                    args.source_file,
+                    "--run-dir",
+                    str(run_dir),
+                ],
+            ):
+                pass
+            if failed_step is None and sample_file:
+                if not run_and_record(
+                    "extract_sample_content.py",
+                    [
+                        "--sample-file",
+                        sample_file,
+                        "--run-dir",
+                        str(run_dir),
+                    ],
+                ):
+                    pass
+            if failed_step is None and not run_and_record("parse_markdown.py", ["--source-file", str(run_dir / "normalized.md"), "--run-dir", str(run_dir)]):
+                pass
+            if failed_step is None and not run_and_record(
+                "docx_validate_ops.py",
+                [
+                    "--run-dir",
+                    str(run_dir),
+                    "--ops-file",
+                    args.ops_file,
+                ],
+            ):
+                pass
+            elif not run_and_record(
+                "compile_execution_ops.py",
+                [
+                    "--run-dir",
+                    str(run_dir),
+                    "--ops-file",
+                    args.ops_file,
+                    "--source-file",
+                    args.source_file,
+                    "--template-file",
+                    args.template_file,
+                    "--target-file",
+                    args.target_file,
+                ],
+            ):
+                pass
+            if failed_step is None and not run_and_record("build_docx.py", ["--run-dir", str(run_dir)], retries=1):
+                pass
+            if failed_step is None and not run_and_record("post_process_docx.py", ["--run-dir", str(run_dir)]):
+                pass
+            if failed_step is None and not run_and_record(
+                "roundtrip_pandoc.py",
+                [
+                    "--run-dir",
+                    str(run_dir),
+                ],
+            ):
+                pass
+            if failed_step is None:
+                run_and_record("qa_docx.py", ["--run-dir", str(run_dir)])
+            if failed_step is None:
+                run_and_record("review_docx.py", ["--run-dir", str(run_dir)])
+    elif not run_and_record("document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
+        pass
+    elif not run_and_record("docx_inspect_raw.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
         pass
     elif not run_and_record("profile_template.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
         pass
@@ -191,13 +268,14 @@ def main() -> None:
         if effective_template_file != args.template_file:
             if not run_and_record("document_topology_detector.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
                 pass
+            elif not run_and_record("docx_inspect_raw.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
+                pass
             elif not run_and_record("profile_template.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
                 pass
             elif not patch_template_profile(run_dir):
                 pass
             elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
                 pass
-
         if failed_step is None and not run_and_record("generate_pandoc_style_map.py", ["--run-dir", str(run_dir)]):
             pass
         if failed_step is None and not run_and_record(
@@ -277,6 +355,7 @@ def main() -> None:
         "source_file": args.source_file,
         "template_file": args.template_file,
         "target_file": args.target_file,
+        "ops_file": args.ops_file,
         "failed_step": failed_step,
         "steps": step_reports,
     }

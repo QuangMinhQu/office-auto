@@ -7,24 +7,24 @@ license: MIT
 # SKILL: DOCX_MCP_TOOLS
 
 ## Muc tieu
-Cung cap bo tool callable de agent dieu phoi pipeline ma khong can compose shell command dai trong prompt.
+Cung cap bo primitive callable de agent reasoning DOCX ma khong can compose shell command dai trong prompt.
 
 ## Cac tool chinh
-- `docx_pipeline_profileTemplate`
-- `docx_pipeline_buildDocx`
-- `docx_pipeline_qaDocx`
-- `docx_pipeline_runFullPipeline`
+- `docx_pipeline_inspectTemplate`
+- `docx_pipeline_validateExecutionOps`
+- `docx_pipeline_applyExecutionOps`
+- `docx_pipeline_readResult`
 
 ## Contract
 - Tool duoc dinh nghia tai `.opencode/tools/docx_pipeline.ts`.
 - Script runtime la Python, execute qua Bun spawn.
-- Tra ve JSON text gom `status`, `failed_step` (neu co), stdout/stderr cho debug.
+- Tra ve JSON text gom `status`, `failed_step` (neu co), artifact path va payload doc duoc khi phu hop.
 - Khong goi truc tiep OfficeCLI MCP tools.
 
 ## Khi nao dung skill nay
-- Can chia workflow profile/build/qa thanh cac action typed va co argument schema.
-- Can de orchestrator agent retry co dieu kien theo tung pha.
+- Can di theo kien truc moi: inspect raw -> LLM viet ops -> validate -> apply -> read result.
+- Can de orchestrator agent retry co dieu kien theo tung primitive.
 
 ## Luu y
 - Neu run fail, doc artifact trong `run_dir` de xac dinh root cause truoc khi retry.
-- Neu `plan.json` blocked thi khong duoc force build.
+- Neu validator ra warnings, sua `execution_ops.json` truoc khi apply.

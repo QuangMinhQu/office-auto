@@ -62,133 +62,136 @@ async function runScript(script: string, args: string[], worktree: string): Prom
   }
 }
 
-export const profileTemplate = tool({
-  description: "Profile template and compile execution plan for DOCX pipeline",
+async function runSteps(steps: ScriptStep[], worktree: string): Promise<{ status: string; failed_step?: string; results: ScriptResult[] }> {
+  const results: ScriptResult[] = []
+  for (const [script, scriptArgs] of steps) {
+    const result = await runScript(script, scriptArgs, worktree)
+    results.push(result)
+    if (!result.ok) {
+      return { status: "failed", failed_step: script, results }
+    }
+  }
+  return { status: "completed", results }
+}
+
+async function readJsonFile(path: string): Promise<any | undefined> {
+  try {
+    const text = await new Response((globalThis as any).Bun.file(path)).text()
+    return JSON.parse(text)
+  } catch {
+    return undefined
+  }
+}
+
+export const inspectTemplate = tool({
+  description: "Read-only raw template inspection for LLM reasoning",
   args: {
     run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
     template_file: tool.schema.string().describe("Template DOCX file path"),
-    source_file: tool.schema.string().describe("Source markdown file path"),
-    mode: tool.schema.string().default("preserve-template-scaffold"),
-    target_file: tool.schema.string().describe("Target DOCX file path"),
   },
   async execute(args, context) {
-    const steps: ScriptStep[] = [
-      ["document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", args.run_dir]],
-      ["profile_template.py", ["--template-file", args.template_file, "--run-dir", args.run_dir]],
-      ["template_suitability_report.py", ["--run-dir", args.run_dir]],
-      ["generate_pandoc_style_map.py", ["--run-dir", args.run_dir]],
-      ["input_processor.py", ["--source-file", args.source_file, "--run-dir", args.run_dir, "--style-spec-file", `${args.run_dir}/pandoc_style_spec.json`]],
-      ["extract_sample_content.py", ["--sample-file", args.template_file, "--run-dir", args.run_dir, "--style-spec-file", `${args.run_dir}/pandoc_style_spec.json`]],
-      ["parse_markdown.py", ["--source-file", `${args.run_dir}/normalized.md`, "--run-dir", args.run_dir]],
-      ["plan_mapping.py", ["--mode", args.mode, "--run-dir", args.run_dir, "--source-file", args.source_file, "--template-file", args.template_file, "--target-file", args.target_file]],
-      ["compile_execution_plan.py", ["--run-dir", args.run_dir]],
-    ]
-
-    const results: ScriptResult[] = []
-    for (const [script, scriptArgs] of steps) {
-      const result = await runScript(script, scriptArgs, context.worktree)
-      results.push(result)
-      if (!result.ok) {
-        return JSON.stringify({ status: "failed", failed_step: script, results }, null, 2)
-      }
-    }
-    return JSON.stringify({ status: "completed", results }, null, 2)
-  },
-})
-
-export const buildDocx = tool({
-  description: "Build DOCX from prepared execution plan",
-  args: {
-    run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
-  },
-  async execute(args, context) {
-    const steps: ScriptStep[] = [
-      ["build_docx.py", ["--run-dir", args.run_dir]],
-      ["post_process_docx.py", ["--run-dir", args.run_dir]],
-    ]
-
-    const results: ScriptResult[] = []
-    for (const [script, scriptArgs] of steps) {
-      const result = await runScript(script, scriptArgs, context.worktree)
-      results.push(result)
-      if (!result.ok) {
-        return JSON.stringify({ status: "failed", failed_step: script, results }, null, 2)
-      }
-    }
-    return JSON.stringify({ status: "completed", results }, null, 2)
-  },
-})
-
-export const qaDocx = tool({
-  description: "Run roundtrip, QA and review layers for DOCX output",
-  args: {
-    run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
-  },
-  async execute(args, context) {
-    const steps: ScriptStep[] = [
-      ["roundtrip_pandoc.py", ["--run-dir", args.run_dir, "--style-spec-file", `${args.run_dir}/pandoc_style_spec.json`]],
-      ["qa_docx.py", ["--run-dir", args.run_dir]],
-      ["review_docx.py", ["--run-dir", args.run_dir]],
-    ]
-
-    const results: ScriptResult[] = []
-    for (const [script, scriptArgs] of steps) {
-      const result = await runScript(script, scriptArgs, context.worktree)
-      results.push(result)
-      if (!result.ok) {
-        return JSON.stringify({ status: "failed", failed_step: script, results }, null, 2)
-      }
-    }
-    return JSON.stringify({ status: "completed", results }, null, 2)
-  },
-})
-
-export const runFullPipeline = tool({
-  description: "Run the full DOCX wrapper pipeline via scripts/build_report.py",
-  args: {
-    run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
-    source_file: tool.schema.string().describe("Source markdown file path"),
-    template_file: tool.schema.string().describe("Template DOCX file path"),
-    target_file: tool.schema.string().describe("Target DOCX file path"),
-    mode: tool.schema.string().default("preserve-template-scaffold"),
-  },
-  async execute(args, context) {
-    const py = "python3"
-    const scriptPath = `${context.worktree}/scripts/build_report.py`
     const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
-    const absSourceFile = resolveWorkspacePath(context.worktree, args.source_file)
     const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
-    const absTargetFile = resolveWorkspacePath(context.worktree, args.target_file)
-
-    const command = [
-      py,
-      scriptPath,
-      "--run-dir",
-      absRunDir,
-      "--source-file",
-      absSourceFile,
-      "--template-file",
-      absTplFile,
-      "--target-file",
-      absTargetFile,
-      "--mode",
-      args.mode,
-    ]
-
-    const proc = BunRuntime.spawn(command, { cwd: context.worktree, stdout: "pipe", stderr: "pipe" })
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ])
-
+    const result = await runSteps(
+      [["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]]],
+      context.worktree,
+    )
+    const payload = await readJsonFile(`${absRunDir}/template_inspection_raw.json`)
     return JSON.stringify(
       {
-        status: exitCode === 0 ? "completed" : "failed",
-        command: command.join(" "),
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        exitCode,
+        ...result,
+        inspection_file: `${absRunDir}/template_inspection_raw.json`,
+        inspection: payload,
+      },
+      null,
+      2,
+    )
+  },
+})
+
+export const validateExecutionOps = tool({
+  description: "Validate LLM-generated execution_ops.json against raw template inspection",
+  args: {
+    run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
+    ops_file: tool.schema.string().describe("LLM-generated execution_ops.json path"),
+  },
+  async execute(args, context) {
+    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absOpsFile = resolveWorkspacePath(context.worktree, args.ops_file)
+    const result = await runSteps(
+      [["docx_validate_ops.py", ["--run-dir", absRunDir, "--ops-file", absOpsFile]]],
+      context.worktree,
+    )
+    const payload = await readJsonFile(`${absRunDir}/execution_ops_validation.json`)
+    return JSON.stringify(
+      {
+        ...result,
+        validation_file: `${absRunDir}/execution_ops_validation.json`,
+        validation: payload,
+      },
+      null,
+      2,
+    )
+  },
+})
+
+export const applyExecutionOps = tool({
+  description: "Mechanical apply of execution_ops.json to a DOCX template",
+  args: {
+    run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
+    template_file: tool.schema.string().describe("Template DOCX file path"),
+    ops_file: tool.schema.string().describe("LLM-generated execution_ops.json path"),
+    target_file: tool.schema.string().describe("Target DOCX file path"),
+    source_file: tool.schema.string().default("").describe("Optional source markdown path recorded in plan/run artifacts only"),
+  },
+  async execute(args, context) {
+    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
+    const absOpsFile = resolveWorkspacePath(context.worktree, args.ops_file)
+    const absTargetFile = resolveWorkspacePath(context.worktree, args.target_file)
+    const compileArgs = ["--run-dir", absRunDir, "--ops-file", absOpsFile, "--template-file", absTplFile, "--target-file", absTargetFile]
+    if (args.source_file) {
+      compileArgs.push("--source-file", resolveWorkspacePath(context.worktree, args.source_file))
+    }
+    const steps: ScriptStep[] = [
+      ["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]],
+      ["compile_execution_ops.py", compileArgs],
+      ["build_docx.py", ["--run-dir", absRunDir]],
+      ["post_process_docx.py", ["--run-dir", absRunDir]],
+    ]
+    const result = await runSteps(steps, context.worktree)
+    const buildReport = await readJsonFile(`${absRunDir}/build_report.json`)
+    return JSON.stringify(
+      {
+        ...result,
+        build_report_file: `${absRunDir}/build_report.json`,
+        build_report: buildReport,
+      },
+      null,
+      2,
+    )
+  },
+})
+
+export const readResult = tool({
+  description: "Read a built DOCX back into text/structure summaries for LLM verification",
+  args: {
+    run_dir: tool.schema.string().describe("Run directory under .office-auto/state"),
+    target_file: tool.schema.string().default("").describe("Optional target DOCX file path override"),
+  },
+  async execute(args, context) {
+    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const steps: ScriptStep[] = [["docx_read_result.py", ["--run-dir", absRunDir]]]
+    if (args.target_file) {
+      steps[0][1].push("--file", resolveWorkspacePath(context.worktree, args.target_file))
+    }
+    const result = await runSteps(steps, context.worktree)
+    const payload = await readJsonFile(`${absRunDir}/result_readback.json`)
+    return JSON.stringify(
+      {
+        ...result,
+        result_file: `${absRunDir}/result_readback.json`,
+        result: payload,
       },
       null,
       2,

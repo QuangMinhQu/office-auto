@@ -1,13 +1,13 @@
 ---
 name: md-to-docx-pipeline
-description: Pipeline xử lý Markdown và DOCX bằng script và artifact ngoài context. Dùng khi cần parse Markdown, profile template, lập plan, build và QA qua file path cộng JSON thay vì đọc toàn bộ nội dung vào prompt.
+description: Primitive DOCX toolchain cho kiến trúc LLM-as-reasoning: inspect raw, validate execution ops, apply ops và read result.
 license: MIT
 ---
 
 # SKILL: MD_TO_DOCX_PIPELINE
 
 ## Mục tiêu
-Skill này hướng agent chạy pipeline deterministic ngoài context.
+Skill này hướng agent dùng scripts như primitive mechanical tools, không dùng planner heuristic cũ trong flow mặc định.
 
 Agent chỉ nên thấy:
 - file path
@@ -21,104 +21,50 @@ Không nên thấy:
 - dump command output dài
 
 ## Khi nào dùng
-- Task có `preserve-template-scaffold` hoặc mode cũ cần normalize sang mode này.
-- Cần parse Markdown thành AST và outline.
-- Cần profile template để lấy style, numbering, page setup, field và scaffold.
-- Cần checkpoint state để resume.
+- Task DOCX cần đúng kiến trúc mới trong `issue.md`.
+- Cần raw inspection của template.
+- Cần validate/apply `execution_ops.json`.
+- Cần đọc output DOCX ra text/structure để verify.
 
 ## Artifacts chuẩn
 - `.office-auto/state/<run_id>/preflight.json`
 - `.office-auto/state/<run_id>/topology.json`
-- `.office-auto/state/<run_id>/template_suitability_report.json`
 - `.office-auto/state/<run_id>/run.json`
-- `.office-auto/state/<run_id>/template_preparation_report.json`
-- `.office-auto/state/<run_id>/effective_template.docx`
-- `.office-auto/state/<run_id>/normalized.md`
-- `.office-auto/state/<run_id>/input_report.json`
-- `.office-auto/state/<run_id>/pandoc_style_spec.json`
-- `.office-auto/state/<run_id>/sample_content.md`
-- `.office-auto/state/<run_id>/sample_outline.json`
-- `.office-auto/state/<run_id>/sample_content_report.json`
-- `.office-auto/state/<run_id>/content_ast.json`
-- `.office-auto/state/<run_id>/content_outline.json`
-- `.office-auto/state/<run_id>/template_profile.json`
+- `.office-auto/state/<run_id>/template_inspection_raw.json`
+- `.office-auto/state/<run_id>/execution_ops.json`
+- `.office-auto/state/<run_id>/execution_ops_validation.json`
 - `.office-auto/state/<run_id>/plan.json`
 - `.office-auto/state/<run_id>/execution_plan.json`
 - `.office-auto/state/<run_id>/build_report.json`
 - `.office-auto/state/<run_id>/post_process_report.json`
-- `.office-auto/state/<run_id>/review_report.json`
-- `.office-auto/state/<run_id>/review_report.md`
-- `.office-auto/state/<run_id>/review_screen.html`
-- `.office-auto/state/<run_id>/roundtrip.md`
-- `.office-auto/state/<run_id>/roundtrip_report.json`
-- `.office-auto/state/<run_id>/qa_report.json`
-- `.office-auto/state/<run_id>/pipeline_report.json` khi chạy qua wrapper `scripts/build_report.py`
+- `.office-auto/state/<run_id>/result_readback.json`
 
 ## Trình tự chạy
-1. `scripts/document_topology_detector.py`
-2. `scripts/profile_template.py`
-3. `scripts/template_suitability_report.py`
-4. `scripts/prepare_template_scaffold.py` khi template lịch sử quá dày
-5. `scripts/document_topology_detector.py` lại nếu wrapper đã sinh `effective_template.docx`
-6. `scripts/profile_template.py` lại nếu wrapper đã sinh `effective_template.docx`
-7. `scripts/template_suitability_report.py` lại sau profile cập nhật
-8. `scripts/generate_pandoc_style_map.py`
-9. `scripts/input_processor.py`
-10. `scripts/extract_sample_content.py`
-11. `scripts/parse_markdown.py`
-12. `scripts/plan_mapping.py`
-13. `scripts/compile_execution_plan.py`
-14. `scripts/build_docx.py`
-15. `scripts/post_process_docx.py`
-16. `scripts/roundtrip_pandoc.py`
-17. `scripts/qa_docx.py`
-18. `scripts/review_docx.py`
+1. `scripts/document_topology_detector.py` (optional observability)
+2. `scripts/docx_inspect_raw.py`
+3. LLM tự đọc markdown nguồn và tự viết `execution_ops.json`
+4. `scripts/docx_validate_ops.py`
+5. `scripts/compile_execution_ops.py`
+6. `scripts/build_docx.py`
+7. `scripts/post_process_docx.py`
+8. `scripts/docx_read_result.py`
 
 ## Contract ngắn cho từng script
 
-### `parse_markdown.py`
-- Input: `--source-file`, `--run-dir`
-- Output: `content_ast.json`, `content_outline.json`
-
-### `profile_template.py`
+### `docx_inspect_raw.py`
 - Input: `--template-file`, `--run-dir`
-- Output: `template_profile.json`
-- Trách nhiệm: phát hiện scaffold, field TOC/danh mục, section count, heading candidate và replace-range candidate qua OfficeCLI `view/get/query`.
+- Output: `template_inspection_raw.json`
+- Trách nhiệm: dump raw OfficeCLI snapshots và body/style/TOC/field data đủ để LLM tự suy luận.
 
-### `prepare_template_scaffold.py`
-- Input: `--template-file`, `--run-dir`
-- Output: `template_preparation_report.json`, có thể sinh `effective_template.docx`
-- Trách nhiệm: giảm template lịch sử về scaffold mỏng hơn, giữ preserve zones và cache theo content hash.
+### `docx_validate_ops.py`
+- Input: `--run-dir`, `--ops-file`
+- Output: `execution_ops_validation.json`
+- Trách nhiệm: cảnh báo anchor/style/prototype_path/remove-path không khớp template inspection raw; không block execution.
 
-### `generate_pandoc_style_map.py`
-- Input: `--run-dir`
-- Output: `pandoc_style_spec.json`
-- Trách nhiệm: tổng hợp styleId/styleName của template thành style spec dùng cho semantic grounding và QA metadata.
-
-### `input_processor.py`
-- Input: `--source-file`, `--run-dir`, `--style-spec-file`
-- Output: `normalized.md`
-- Trách nhiệm: normalize đầu vào `.md/.docx/...` thành Markdown thống nhất trước khi parse bằng Pandoc.
-
-### `extract_sample_content.py`
-- Input: `--sample-file`, `--run-dir`, `--style-spec-file`
-- Output: `sample_content.md`, `sample_outline.json`
-- Trách nhiệm: trích semantic scaffold từ template/sample DOCX để planner có thể trim front matter đã được scaffold cover sẵn.
-
-### `parse_markdown.py`
-- Input: `--source-file`, `--run-dir`
-- Output: `content_ast.json`, `content_outline.json`
-
-### `plan_mapping.py`
-- Input: `--mode`, `--run-dir`, `--source-file`, `--template-file`, `--target-file`
-- Output: `plan.json`, cập nhật `run.json`
-- Trách nhiệm: normalize mode cũ, sinh `preserve`, `replace_ranges`, `post_conditions`, `execution_strategy`, và `semantic_grounding.source_render_window`.
-- Error contract: nếu `replace_ranges` chưa `resolved` trong mode `preserve-template-scaffold` thì `plan.json.status` phải là `blocked` và downstream không được build tiếp như thể thành công.
-
-### `compile_execution_plan.py`
-- Input: `--run-dir`
-- Output: `execution_plan.json`
-- Trách nhiệm: compile `plan.json` và `content_ast.json` thành render ops deterministic, có reuse prototype format defaults nhưng không override trực tiếp font/size cho heading roles.
+### `compile_execution_ops.py`
+- Input: `--run-dir`, `--ops-file`, `--template-file`, `--target-file`, `--source-file?`
+- Output: `execution_ops.json`, `plan.json`, `execution_plan.json`
+- Trách nhiệm: compile `execution_ops.json` do LLM/agent soạn sẵn thành execution graph cơ học; không làm style/range inference heuristic.
 
 ### `build_docx.py`
 - Input: `--run-dir`
@@ -128,31 +74,13 @@ Không nên thấy:
 - Nếu template có TOC hoặc field dẫn hướng phụ thuộc heading, script phải giữ field đó và chọn refresh strategy native, ví dụ rewrite TOC field qua L2. Chỉ dùng L3 khi L2 không đủ và phải ghi rõ vào `build_report.json`.
 - Error contract: khi `plan.json.status=blocked`, script phải ghi `build_report.json.status=blocked`, không tạo output giả hoàn tất và phải giữ `run.json.status=blocked`.
 
-### `review_docx.py`
-- Input: `--run-dir`
-- Output: `review_report.json`, `review_report.md`, `review_screen.html`
-- Trách nhiệm: tạo lớp screen review sau QA, so output với template baseline phù hợp và highlight các paragraph mới có drift về style, align, cỡ chữ, font hoặc spacing.
-
-### `roundtrip_pandoc.py`
-- Input: `--run-dir`, `--style-spec-file`
-- Output: `roundtrip.md`, `roundtrip_report.json`
-- Trách nhiệm: convert output DOCX ngược về Markdown qua Pandoc, trim cùng semantic window của template scaffold, rồi so semantic heading/table/body text.
-
-### `qa_docx.py`
-- Input: `--run-dir`
-- Output: `qa_report.json`
-- Trách nhiệm: kiểm package QA, structural QA, range QA và semantic QA.
-- Threshold tối thiểu: `header_count_output >= header_count_template`, `footer_count_output >= footer_count_template`, và nếu template có TOC hoặc danh mục hình/bảng thì field tương ứng phải còn trong file đích.
-- Nếu TOC đang dựa vào refresh-on-open, QA phải đọc refresh strategy từ `build_report.json`; nếu TOC đã render sẵn trong package thì hyperlink/anchor của các entry phải còn hợp lệ.
-
-### `scripts/build_report.py`
-- Input: `--run-dir`, `--source-file`, `--template-file`, `--target-file`, `--sample-file?`
-- Output: `pipeline_report.json`
-- Trách nhiệm: wrapper điều phối full flow, tự chọn `effective_template.docx` làm sample mặc định, retry hẹp cho `build_docx.py` khi OfficeCLI batch bị flaky lần đầu, và sinh review artifacts sau khi QA đã hoàn tất.
+### `docx_read_result.py`
+- Input: `--run-dir`, `--file?`
+- Output: `result_readback.json`
+- Trách nhiệm: đọc output DOCX thành outline/text/field/toc summary để LLM tự verify.
 
 ## Quy tắc
 - Mỗi script phải ghi artifact ngắn, có schema ổn định.
 - Mỗi script phải có thể chạy lại mà không làm hỏng run state.
-- Mọi script OfficeCLI native phải dùng `officecli --version` hoặc `preflight.json` làm source-of-truth cho runtime hiện tại.
-- Không được dùng `scaffolded`, `pending-implementation` hoặc trạng thái mơ hồ để ngụy trang thành công khi đường build thật chưa đạt chuẩn.
-- Nếu chưa resolve được range thay nội dung hoặc chưa chứng minh được scaffold preservation, script phải fail rõ ràng.
+- `execution_ops.json` là source of truth cho planning path mới.
+- Các scripts heuristic cũ (`profile_template.py`, `plan_mapping.py`, `compile_execution_plan.py`, wrapper default cũ) chỉ còn phục vụ legacy/debug, không phải mặc định vận hành.

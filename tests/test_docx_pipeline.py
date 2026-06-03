@@ -11,6 +11,9 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 import compile_execution_plan
 import build_docx
+import compile_execution_ops
+import docx_validate_ops
+import docx_inspect_raw
 import document_topology_detector
 import generate_markitdown_style_map
 import officecli_native
@@ -84,6 +87,38 @@ class OfficeCliContractTests(unittest.TestCase):
             officecli_native.extract_added_path(payload, element_type="paragraph", parent="/body"),
             "/body/p[@paraId=0010259A]",
         )
+
+
+class RawInspectTests(unittest.TestCase):
+    def test_build_raw_inspection_payload_keeps_raw_samples_without_heuristics(self) -> None:
+        payload = docx_inspect_raw.build_raw_inspection_payload(
+            template_file=REPO_ROOT / "format_template.docx",
+            officecli_version="1.0.0",
+            outline_view={"headings": [{"text": "Muc luc"}]},
+            stats_view={"paragraphCount": 12},
+            text_view={
+                "elements": [
+                    {"path": "/body/p[1]", "type": "paragraph", "text": "Trang bia", "style": "Title"},
+                    {"path": "/styles/style[1]", "type": "style", "text": "Normal"},
+                    {"path": "/body/p[2]", "type": "paragraph", "text": "Noi dung", "style": "Normal"},
+                ]
+            },
+            styles_tree={"path": "/styles", "type": "styles", "childCount": 4},
+            numbering_tree={"path": "/numbering", "type": "numbering", "childCount": 2},
+            section_results=[{"path": "/sections/sec[1]", "type": "section", "text": "sec"}],
+            style_results=[{"path": "/styles/style[1]", "type": "style", "text": "Normal", "format": {"id": "Normal"}}],
+            paragraph_results=[{"path": "/body/p[1]", "type": "paragraph", "text": "Trang bia", "format": {"styleId": "Title"}}],
+            header_results=[{"path": "/headers/header[1]", "type": "header", "text": "Header"}],
+            footer_results=[{"path": "/footers/footer[1]", "type": "footer", "text": "Footer"}],
+            toc_results=[{"path": "/toc[1]", "type": "toc", "text": "Muc luc"}],
+            field_results=[{"path": "/fields/field[1]", "type": "field", "text": "PAGEREF"}],
+        )
+
+        self.assertEqual(payload["counts"]["paragraphs"], 1)
+        self.assertEqual(payload["styles_tree"]["path"], "/styles")
+        self.assertEqual(len(payload["body_elements_sample"]), 2)
+        self.assertEqual(payload["body_elements_sample"][0]["path"], "/body/p[1]")
+        self.assertEqual(payload["paragraph_sample"][0]["format"]["styleId"], "Title")
 
 
 class PlannerTests(unittest.TestCase):
@@ -274,6 +309,155 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(window["strategy"], "skip-prefix-covered-by-template-scaffold")
         self.assertEqual(window["anchor_text"], "office-auto")
         self.assertGreater(window["start_block_index"], 0)
+
+    def test_compile_execution_ops_builds_ready_plan_from_llm_ops(self) -> None:
+        template_inspection = {
+            "counts": {"headers": 1, "footers": 1, "tocs": 1, "fields": 2},
+            "body_paragraphs": [{"path": "/body/p[10]", "bookmarks": []}],
+        }
+        ops_payload = {
+            "preserve": ["headers-footers", "toc"],
+            "prototype_roles": {
+                "body": {"path": "/body/p[9]"},
+                "h1": {"path": "/body/p[10]"},
+            },
+            "selected_replace_range": {
+                "name": "after-front-matter-to-end-of-main-story",
+                "status": "resolved",
+                "insert_after_path": "/body/p[8]",
+                "remove_paths": ["/body/p[9]", "/body/p[10]"],
+                "preserve_zones": ["front-matter"],
+            },
+            "ops": [
+                {
+                    "op": "insert_paragraph_after",
+                    "anchor": "selected_replace_range.insert_after_path",
+                    "role": "h1",
+                    "style": "Heading1",
+                    "text": "CƠ SỞ LÝ THUYẾT",
+                    "run_props": {"font": "Times New Roman", "size": "14pt", "bold": True},
+                },
+                {
+                    "op": "insert_table_after",
+                    "anchor": "previous",
+                    "rows": [
+                        {"header": True, "cells": [{"text": "Cột A"}, {"text": "Cột B"}]},
+                        {"cells": [{"text": "1"}, {"text": "2"}]},
+                    ],
+                },
+            ],
+        }
+
+        plan, execution_plan, run_state = compile_execution_ops.compile_execution_artifacts(
+            run_dir=REPO_ROOT / ".office-auto" / "state" / "test-llm-ops",
+            template_inspection=template_inspection,
+            ops_payload=ops_payload,
+            source_file=str(REPO_ROOT / "noidung.md"),
+            template_file=str(REPO_ROOT / "format_template.docx"),
+            target_file=str(REPO_ROOT / "report.docx"),
+        )
+
+        self.assertEqual(plan["status"], "ready-for-execution")
+        self.assertEqual(plan["execution_strategy"], "llm-execution-ops")
+        self.assertEqual(execution_plan["status"], "ready")
+        self.assertEqual(execution_plan["render_ops"][0]["prototype_path"], "/body/p[10]")
+        self.assertEqual(execution_plan["render_ops"][0]["set_props"]["style"], "Heading1")
+        self.assertEqual(execution_plan["render_ops"][0]["anchor"], "selected_replace_range.insert_after_path")
+        self.assertEqual(execution_plan["render_summary"]["table_ops"], 1)
+        self.assertEqual(run_state["status"], "planned")
+
+    def test_compile_execution_ops_preserves_semantic_grounding_artifacts(self) -> None:
+        run_dir = REPO_ROOT / ".office-auto" / "state" / "test-llm-ops-grounding"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            officecli_native.write_json(
+                run_dir / "run.json",
+                {
+                    "artifacts": {
+                        "normalized_markdown": str(run_dir / "normalized.md"),
+                        "pandoc_style_spec": str(run_dir / "pandoc_style_spec.json"),
+                        "sample_content": str(run_dir / "sample_content.md"),
+                        "sample_outline": str(run_dir / "sample_outline.json"),
+                    }
+                },
+            )
+            officecli_native.write_json(
+                run_dir / "content_ast.json",
+                {"blocks": [{"type": "heading", "text": "Mở đầu", "line": 1, "runs": [{"text": "Mở đầu"}]}]},
+            )
+
+            template_inspection = {
+                "counts": {"headers": 1, "footers": 0, "tocs": 0, "fields": 0},
+                "body_paragraphs": [],
+            }
+            ops_payload = {
+                "selected_replace_range": {
+                    "name": "main",
+                    "status": "resolved",
+                    "insert_after_path": "/body/p[8]",
+                    "remove_paths": ["/body/p[9]"],
+                    "preserve_zones": [],
+                },
+                "ops": [
+                    {
+                        "op": "insert_paragraph_after",
+                        "anchor": "selected_replace_range.insert_after_path",
+                        "style": "Normal",
+                        "text": "Nội dung",
+                    }
+                ],
+            }
+
+            plan, _, run_state = compile_execution_ops.compile_execution_artifacts(
+                run_dir=run_dir,
+                template_inspection=template_inspection,
+                ops_payload=ops_payload,
+                source_file=str(REPO_ROOT / "noidung.md"),
+                template_file=str(REPO_ROOT / "format_template.docx"),
+                target_file=str(REPO_ROOT / "report.docx"),
+            )
+
+            self.assertEqual(plan["semantic_grounding"]["normalized_markdown"], str(run_dir / "normalized.md"))
+            self.assertEqual(plan["semantic_grounding"]["pandoc_style_spec"], str(run_dir / "pandoc_style_spec.json"))
+            self.assertEqual(plan["semantic_grounding"]["source_render_window"]["strategy"], "full-document")
+            self.assertEqual(run_state["artifacts"]["content_ast"], str(run_dir / "content_ast.json"))
+        finally:
+            for path in sorted(run_dir.glob("*"), reverse=True):
+                path.unlink(missing_ok=True)
+            run_dir.rmdir()
+
+    def test_docx_validate_ops_warns_for_unknown_style_and_anchor(self) -> None:
+        template_inspection = {
+            "style_catalog": [{"style_id": "Normal"}, {"style_id": "Heading1"}],
+            "body_children": [{"path": "/body/p[8]"}, {"path": "/body/p[9]"}],
+            "body_paragraphs": [{"path": "/body/p[2]"}],
+            "toc_entries": [],
+            "field_entries": [],
+        }
+        ops_payload = {
+            "selected_replace_range": {
+                "name": "main",
+                "status": "resolved",
+                "insert_after_path": "/body/p[8]",
+                "remove_paths": ["/body/p[9]"],
+            },
+            "ops": [
+                {
+                    "op": "insert_paragraph_after",
+                    "anchor": "/body/p[999]",
+                    "style": "MissingStyle",
+                    "prototype_path": "/body/p[777]",
+                    "text": "Test",
+                }
+            ],
+        }
+
+        warnings = docx_validate_ops.validate_ops_payload(ops_payload, template_inspection)
+
+        self.assertEqual(len(warnings), 3)
+        self.assertTrue(any("anchor `" in warning for warning in warnings))
+        self.assertTrue(any("style `MissingStyle`" in warning for warning in warnings))
+        self.assertTrue(any("prototype_path `" in warning for warning in warnings))
 
 
 class BuilderPrototypeTests(unittest.TestCase):

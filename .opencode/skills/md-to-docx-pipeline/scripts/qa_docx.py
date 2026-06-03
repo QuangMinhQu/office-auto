@@ -171,6 +171,32 @@ def check_section_breaks(section_results: list[dict], template_profile: dict) ->
     return template_body_section == 0 or len(section_results) >= template_body_section
 
 
+def template_baseline(run_dir: Path) -> dict:
+    if (run_dir / "template_profile.json").exists():
+        return read_json(run_dir / "template_profile.json")
+
+    if not (run_dir / "template_inspection_raw.json").exists():
+        return {}
+
+    inspection = read_json(run_dir / "template_inspection_raw.json")
+    outline_snapshot = inspection.get("outline_snapshot") or {}
+    headings = []
+    for item in outline_snapshot.get("headings", []):
+        text = item.get("text") if isinstance(item, dict) else None
+        if text:
+            headings.append({"text": text, "style": item.get("style") if isinstance(item, dict) else None})
+
+    return {
+        "header_count": inspection.get("counts", {}).get("headers", 0),
+        "footer_count": inspection.get("counts", {}).get("footers", 0),
+        "prototype_catalog": {},
+        "document_profile": {
+            "body_section_count": inspection.get("counts", {}).get("sections", 0),
+            "headings": headings,
+        },
+    }
+
+
 def is_subsequence(source: list[str], output: list[str]) -> bool:
     if not source:
         return True
@@ -357,7 +383,7 @@ def main() -> None:
     plan = read_json(run_dir / "plan.json")
     build_report = read_json(run_dir / "build_report.json") if (run_dir / "build_report.json").exists() else {}
     roundtrip_report = read_json(run_dir / "roundtrip_report.json") if (run_dir / "roundtrip_report.json").exists() else {}
-    template_profile = read_json(run_dir / "template_profile.json")
+    template_profile = template_baseline(run_dir)
     outline_payload = read_json(run_dir / "content_outline.json") if (run_dir / "content_outline.json").exists() else {"outline": []}
     execution_plan = read_json(run_dir / "execution_plan.json") if (run_dir / "execution_plan.json").exists() else {}
     source_render_window = (plan.get("semantic_grounding") or {}).get("source_render_window") or {}
