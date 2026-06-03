@@ -88,16 +88,17 @@ export const inspectTemplate = tool({
   title: "DOCX Template Inspector",
   description: `Read-only raw inspection of a DOCX template for LLM reasoning.
 
-PRECONDITIONS:
-- template_file must exist and be a valid .docx file.
+Writes {run_dir}/docx_inspect_output.json (combined), plus layer files:
+- docx_inspect_paragraph_sample.json: first 30 paragraphs (quick reference)
+- docx_inspect_all_para_ids.json: ALL paragraph paraIds (full document, use for anchor references)
 
-POSTCONDITIONS:
-- Writes: {run_dir}/template_inspection_raw.json (style hierarchy, anchors, fields).
-- Returns: JSON with status + full inspection payload.
+Schema: styles_raw (with outline_level_xml), paragraph_sample, all_para_ids,
+page_layout_raw (twips), toc_entries_raw, front_matter_boundary.
 
-CALL ORDER:
-- Must be called BEFORE validateExecutionOps and applyExecutionOps.
-- Safe to call multiple times (idempotent); subsequent calls overwrite the JSON.
+Anchor format: /body/p[@paraId=XXXX] where XXXX is from all_para_ids.
+
+CALL ORDER: Must be called BEFORE validateExecutionOps and applyExecutionOps.
+Safe to call multiple times (idempotent).
 
 ANNOTATIONS: read-only, idempotent, local filesystem only.`,
   annotations: {
@@ -138,14 +139,15 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
     const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
     const result = await runSteps(
-      [["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]]],
+      [["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]]],
       context.worktree,
     )
-    const payload = await readJsonFile(`${absRunDir}/template_inspection_raw.json`)
+    // New schema: read from docx_inspect_output.json (combined output)
+    const payload = await readJsonFile(`${absRunDir}/docx_inspect_output.json`)
     return JSON.stringify(
       {
         ...result,
-        inspection_file: `${absRunDir}/template_inspection_raw.json`,
+        inspection_file: `${absRunDir}/docx_inspect_output.json`,
         inspection: payload,
       },
       null,
@@ -157,19 +159,16 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
 export const validateExecutionOps = tool({
   // @ts-expect-error title is spec 2025-11-25, not yet in opencode plugin types
   title: "DOCX Execution Ops Validator",
-  description: `Validate LLM-generated execution_ops.json against raw template inspection to catch anchor mismatches, invalid paths, and structural conflicts.
+  description: `Validate LLM-generated execution_ops.json against raw template inspection.
 
-PRECONDITIONS:
-- {run_dir}/template_inspection_raw.json must exist (run inspectTemplate first).
-- ops_file must exist and contain valid JSON with an "ops" array.
+Validates anchors against ALL paragraph paraIds (all_para_ids), not just the first 30.
+Anchor conventions: "PREVIOUS" (sequential, always valid) or "/body/p[@paraId=XXXX]" (explicit, validated).
 
-POSTCONDITIONS:
-- Writes: {run_dir}/execution_ops_validation.json (warnings[], errors[], is_valid).
-- Returns: JSON with validation status + detailed findings.
+PRECONDITIONS: {run_dir}/docx_inspect_output.json must exist.
+POSTCONDITIONS: Writes {run_dir}/execution_ops_validation.json.
 
-CALL ORDER:
-- Must be called AFTER inspectTemplate and BEFORE applyExecutionOps.
-- If warnings are present, LLM should fix execution_ops.json and re-validate before applying.
+CALL ORDER: AFTER inspectTemplate, BEFORE applyExecutionOps.
+If warnings present, fix execution_ops.json and re-validate.
 
 ANNOTATIONS: read-only, idempotent, local filesystem only.`,
   annotations: {
@@ -202,9 +201,9 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     required: ["ok", "validation_file"],
   },
   args: {
-    run_dir: tool.schema.string().describe("Run directory under .office-auto/state/ where template_inspection_raw.json and execution_ops.json reside."),
-    ops_file: tool.schema.string().describe("Absolute or relative path to the LLM-generated execution_ops.json file."),
-    strict_mode: tool.schema.boolean().default(false).describe("If true, warnings are treated as errors and the tool returns status=failed. Use for final validation before production builds."),
+    run_dir: tool.schema.string().describe("Run directory under .office-auto/state/."),
+    ops_file: tool.schema.string().describe("Absolute or relative path to execution_ops.json."),
+    strict_mode: tool.schema.boolean().default(false).describe("If true, warnings are treated as errors."),
   },
   async execute(args, context) {
     const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
@@ -235,21 +234,16 @@ export const applyExecutionOps = tool({
   title: "DOCX Execution Ops Apply",
   description: `Mechanical apply of execution_ops.json to a DOCX template, producing a built report DOCX.
 
-PRECONDITIONS:
-- {run_dir}/execution_ops.json must exist and contain valid JSON with an "ops" array.
-- template_file must exist and be a valid .docx file.
-- For phases containing 'validate': {run_dir}/execution_ops_validation.json should exist (run validateExecutionOps first).
+Anchor conventions: "/body/p[@paraId=XXXX]" (explicit) or "PREVIOUS" (sequential, inserts after last op's result).
+Standard pattern: first op uses explicit paraId, subsequent ops use "PREVIOUS".
 
-POSTCONDITIONS:
-- Writes: {run_dir}/build_report.json, {run_dir}/post_process_report.json, and target_file (.docx).
-- Returns: JSON with build status + build_report payload.
+PRECONDITIONS: {run_dir}/execution_ops.json must exist. template_file must be valid .docx.
+POSTCONDITIONS: Writes {run_dir}/build_report.json, {run_dir}/execute_ops_report.json, and target_file.
 
-CALL ORDER:
-- Must be called AFTER validateExecutionOps (recommended) and inspectTemplate.
-- Use mode='incremental' to skip re-inspection if template_inspection_raw.json already exists.
-- Use mode='ops_only' to skip inspect and run only compile→build→post_process.
+CALL ORDER: AFTER validateExecutionOps and inspectTemplate.
+Modes: 'full' (re-inspect), 'incremental' (skip if output exists), 'ops_only' (execute only).
 
-ANNOTATIONS: writes output DOCX, non-idempotent (creates new artifacts each run).`,
+ANNOTATIONS: writes output DOCX, non-idempotent.`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,
@@ -281,20 +275,15 @@ ANNOTATIONS: writes output DOCX, non-idempotent (creates new artifacts each run)
     required: ["ok", "build_report_file"],
   },
   args: {
-    run_dir: tool.schema.string().describe("Run directory under .office-auto/state/ where execution_ops.json and template_inspection_raw.json reside."),
+    run_dir: tool.schema.string().describe("Run directory under .office-auto/state/."),
     template_file: tool.schema.string().describe("Absolute or relative path to the .docx template file."),
-    ops_file: tool.schema.string().describe("Absolute or relative path to the LLM-generated execution_ops.json file."),
+    ops_file: tool.schema.string().describe("Absolute or relative path to execution_ops.json."),
     target_file: tool.schema.string().describe("Absolute or relative path for the output .docx file."),
-    source_file: tool.schema.string().default("").describe("Optional source markdown path, recorded in plan/run artifacts only."),
+    source_file: tool.schema.string().default("").describe("Optional source markdown path."),
     mode: tool.schema
       .enum(["full", "incremental", "ops_only"])
       .default("full")
-      .describe(
-        "Build mode: " +
-        "'full' runs inspect→compile→build→post_process (default); " +
-        "'incremental' skips re-inspection if template_inspection_raw.json already exists in run_dir (faster for retry loops); " +
-        "'ops_only' skips inspect and runs only compile→build→post_process (use when template is unchanged and only execution_ops.json was edited)."
-      ),
+      .describe("'full' re-inspects; 'incremental' skips if output exists; 'ops_only' executes only."),
   },
   async execute(args, context) {
     const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
@@ -312,23 +301,22 @@ ANNOTATIONS: writes output DOCX, non-idempotent (creates new artifacts each run)
 
     if (mode === "full") {
       // Full mode: always re-inspect
-      steps.push(["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
+      steps.push(["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
     } else if (mode === "incremental") {
-      // Incremental: skip re-inspect if template_inspection_raw.json already exists
-      const inspectionPath = `${absRunDir}/template_inspection_raw.json`
+      // Incremental: skip re-inspect if docx_inspect_output.json already exists
+      const inspectionPath = `${absRunDir}/docx_inspect_output.json`
       try {
         await new Response((globalThis as any).Bun.file(inspectionPath)).text()
         // File exists, skip inspect
       } catch {
         // File doesn't exist, fall back to full re-inspect
-        steps.push(["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
+        steps.push(["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
       }
     }
     // ops_only: skip inspect entirely
 
-    steps.push(["compile_execution_ops.py", compileArgs])
-    steps.push(["build_docx.py", ["--run-dir", absRunDir]])
-    steps.push(["post_process_docx.py", ["--run-dir", absRunDir]])
+    // Single executor script handles compile + build + post_process
+    steps.push(["execute_execution_ops.py", ["--run-dir", absRunDir]])
 
     const result = await runSteps(steps, context.worktree)
     const buildReport = await readJsonFile(`${absRunDir}/build_report.json`)
@@ -430,31 +418,15 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
 export const runPipeline = tool({
   // @ts-expect-error title is spec 2025-11-25, not yet in opencode plugin types
   title: "DOCX Pipeline Runner",
-  description: `Composite tool that runs one or more pipeline phases in sequence.
+  description: `Composite tool: inspect → validate → apply → read.
 
-Phase order (always preserved): inspect → validate → apply → read.
+Use phases=["all"] for full pipeline, or custom array for partial runs.
+Prefer individual tools when you need to inspect intermediate outputs.
 
-Use this tool when:
-- Running a full pipeline from scratch: phases=["all"]
-- Resuming after LLM has written execution_ops.json: phases=["validate","apply","read"]
-- Only verifying an existing output: phases=["read"]
+PRECONDITIONS: execution_ops.json for validate/apply; template_file for inspect; build_report.json for read.
+POSTCONDITIONS: All intermediate artifacts for each phase.
 
-Prefer individual tools (inspectTemplate, validateExecutionOps, etc.) when you need to inspect intermediate outputs or handle errors between phases.
-
-PRECONDITIONS:
-- For phases containing 'validate' or 'apply': {run_dir}/execution_ops.json must exist and contain valid JSON.
-- For phase 'inspect': template_file must exist and be a valid .docx file.
-- For phase 'read': {run_dir}/build_report.json must exist with status=completed.
-
-POSTCONDITIONS:
-- Writes: all intermediate artifacts for each phase run.
-- Returns: aggregate result with per-phase status.
-
-CALL ORDER:
-- This tool replaces calling individual tools sequentially.
-- Use phases=["all"] for full pipeline. Use custom arrays for partial runs.
-
-ANNOTATIONS: writes output artifacts, non-idempotent, local filesystem only.`,
+ANNOTATIONS: writes output artifacts, non-idempotent.`,
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,
@@ -526,16 +498,16 @@ ANNOTATIONS: writes output artifacts, non-idempotent, local filesystem only.`,
     for (const phase of phases) {
       if (phase === "inspect") {
         const inspectResult = await runSteps(
-          [["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]]],
+          [["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]]],
           context.worktree,
         )
-        phasesStatus["inspect"] = { status: inspectResult.status, script: "docx_inspect_raw.py", exitCode: inspectResult.results[0]?.exitCode ?? 0 }
+        phasesStatus["inspect"] = { status: inspectResult.status, script: "docx_inspect.py", exitCode: inspectResult.results[0]?.exitCode ?? 0 }
         if (inspectResult.status !== "completed") {
           overallStatus = "failed"
           failedPhase = "inspect"
           break
         }
-        artifacts.inspection_file = `${absRunDir}/template_inspection_raw.json`
+        artifacts.inspection_file = `${absRunDir}/docx_inspect_output.json`
       } else if (phase === "validate") {
         const validateArgs = ["--run-dir", absRunDir, "--ops-file", absOpsFile]
         const validateResult = await runSteps(
@@ -550,31 +522,25 @@ ANNOTATIONS: writes output artifacts, non-idempotent, local filesystem only.`,
         }
         artifacts.validation_file = `${absRunDir}/execution_ops_validation.json`
       } else if (phase === "apply") {
-        const compileArgs = ["--run-dir", absRunDir, "--ops-file", absOpsFile, "--template-file", absTplFile, "--target-file", absTargetFile]
-        if (absSourceFile) {
-          compileArgs.push("--source-file", absSourceFile)
-        }
-
         const applySteps: ScriptStep[] = []
         const mode = args.mode || "full"
 
         if (mode === "full") {
-          applySteps.push(["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
+          applySteps.push(["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
         } else if (mode === "incremental") {
-          const inspectionPath = `${absRunDir}/template_inspection_raw.json`
+          const inspectionPath = `${absRunDir}/docx_inspect_output.json`
           try {
             await new Response((globalThis as any).Bun.file(inspectionPath)).text()
           } catch {
-            applySteps.push(["docx_inspect_raw.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
+            applySteps.push(["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])
           }
         }
 
-        applySteps.push(["compile_execution_ops.py", compileArgs])
-        applySteps.push(["build_docx.py", ["--run-dir", absRunDir]])
-        applySteps.push(["post_process_docx.py", ["--run-dir", absRunDir]])
+        // Single executor script handles compile + build + post_process
+        applySteps.push(["execute_execution_ops.py", ["--run-dir", absRunDir]])
 
         const applyResult = await runSteps(applySteps, context.worktree)
-        phasesStatus["apply"] = { status: applyResult.status, script: applyResult.failed_step || "compile_execution_ops.py", exitCode: applyResult.results[applyResult.results.length - 1]?.exitCode ?? 0 }
+        phasesStatus["apply"] = { status: applyResult.status, script: applyResult.failed_step || "execute_execution_ops.py", exitCode: applyResult.results[applyResult.results.length - 1]?.exitCode ?? 0 }
         if (applyResult.status !== "completed") {
           overallStatus = "failed"
           failedPhase = "apply"

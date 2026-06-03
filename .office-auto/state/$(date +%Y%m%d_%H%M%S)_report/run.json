@@ -1,0 +1,7 @@
+{
+  "status": "built",
+  "artifacts": {
+    "execute_ops_report": "/home/minhquang/office-auto/.office-auto/state/$(date +%Y%m%d_%H%M%S)_report/execute_ops_report.json",
+    "result_readback": "/home/minhquang/office-auto/.office-auto/state/$(date +%Y%m%d_%H%M%S)_report/result_readback.json"
+  }
+}

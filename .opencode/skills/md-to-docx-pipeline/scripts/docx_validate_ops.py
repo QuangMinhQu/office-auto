@@ -54,14 +54,28 @@ def collect_known_style_ids(template_inspection: dict) -> set[str]:
 
 
 def collect_known_para_ids(template_inspection: dict) -> set[str]:
-    """Collect all para_ids from template inspection (new schema)."""
+    """Collect all para_ids from template inspection (new schema).
+
+    Priority:
+    1. all_para_ids — full document paraIds (ground truth for validator)
+    2. paragraph_sample — first N paragraphs (fallback, limited to 30)
+
+    This ensures anchors beyond the first 30 paragraphs are still validated.
+    """
     para_ids: set[str] = set()
 
-    # From paragraph_sample
-    for entry in template_inspection.get("paragraph_sample", []):
+    # Priority 1: all_para_ids (full document, no sampling)
+    for entry in template_inspection.get("all_para_ids", []):
         pid = entry.get("para_id")
         if pid:
             para_ids.add(str(pid))
+
+    # Fallback: paragraph_sample (first N paragraphs, max 30)
+    if not para_ids:
+        for entry in template_inspection.get("paragraph_sample", []):
+            pid = entry.get("para_id")
+            if pid:
+                para_ids.add(str(pid))
 
     return para_ids
 

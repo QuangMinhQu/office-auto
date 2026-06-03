@@ -6,6 +6,7 @@
     ".opencode/memory/project.md"
   ],
   "permission": {
-    "mcp_officecli_*": "deny"
+    "mcp_officecli_*": "deny",
+    "mcp_docx_pipeline_*": "allow"
   }
 }

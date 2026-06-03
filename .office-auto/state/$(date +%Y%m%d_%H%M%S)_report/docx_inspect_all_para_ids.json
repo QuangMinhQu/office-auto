@@ -1,0 +1,344 @@
+[
+  {
+    "index": 0,
+    "para_id": "5E9CB3ED",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 1,
+    "para_id": "32B41AD9",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 2,
+    "para_id": "61AC199D",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 3,
+    "para_id": "460B6396",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 4,
+    "para_id": "79942BDE",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 5,
+    "para_id": "44D02F0C",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 6,
+    "para_id": "66105842",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 7,
+    "para_id": "331B1895",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 8,
+    "para_id": "36E4C0F1",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 9,
+    "para_id": "7A7499CF",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 10,
+    "para_id": "641441CE",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 11,
+    "para_id": "3FD0B2F5",
+    "text_preview": "BÁO CÁO CHUYÊN ĐỀ",
+    "style_name": "Normal"
+  },
+  {
+    "index": 12,
+    "para_id": "02614FCD",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 13,
+    "para_id": "739F7B5F",
+    "text_preview": "NGHIÊN CỨU VÀ ĐÁNH GIÁ PHƯƠNG PHÁP SINH DỮ LIỆU HUẤN LUYỆN SỬ DỤNG CÔNG NGHỆ MÔ ",
+    "style_name": "Normal"
+  },
+  {
+    "index": 14,
+    "para_id": "31E9F98E",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 15,
+    "para_id": "0F796C34",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 16,
+    "para_id": "7D417905",
+    "text_preview": "MỤC LỤC",
+    "style_name": "Normal"
+  },
+  {
+    "index": 17,
+    "para_id": "53CCB46B",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 18,
+    "para_id": "6F325398",
+    "text_preview": "Trang",
+    "style_name": "Normal"
+  },
+  {
+    "index": 19,
+    "para_id": "3E2F376D",
+    "text_preview": "DANH MỤC CÁC KÝ HIỆU, CHỮ VIẾT TẮT\tiii",
+    "style_name": "toc 1"
+  },
+  {
+    "index": 20,
+    "para_id": "346E1F46",
+    "text_preview": "DANH MỤC CÁC HÌNH VẼ\tiv",
+    "style_name": "toc 1"
+  },
+  {
+    "index": 21,
+    "para_id": "7FB28FA0",
+    "text_preview": "GIỚI THIỆU\t1",
+    "style_name": "toc 1"
+  },
+  {
+    "index": 22,
+    "para_id": "003CED1B",
+    "text_preview": "CHƯƠNG 1. CƠ SỞ LÝ THUYẾT\t4",
+    "style_name": "toc 1"
+  },
+  {
+    "index": 23,
+    "para_id": "3C60E193",
+    "text_preview": "1.1. Tầm quan trọng dữ liệu ảnh huấn luyện trong thị giác máy tính\t4",
+    "style_name": "toc 2"
+  },
+  {
+    "index": 24,
+    "para_id": "6BBAAA27",
+    "text_preview": "1.2. Các thách thức phổ biến liên quan đến dữ liệu\t5",
+    "style_name": "toc 2"
+  },
+  {
+    "index": 25,
+    "para_id": "731E9C04",
+    "text_preview": "1.3. Các lĩnh vực ứng dụng chính\t9",
+    "style_name": "toc 2"
+  },
+  {
+    "index": 26,
+    "para_id": "78543D69",
+    "text_preview": "1.4. Các phương pháp sinh dữ liệu ảnh truyền thống\t11",
+    "style_name": "toc 2"
+  },
+  {
+    "index": 27,
+    "para_id": "52C4DE01",
+    "text_preview": "1.4.1. Thu thập dữ liệu ảnh thủ công\t11",
+    "style_name": "toc 3"
+  },
+  {
+    "index": 28,
+    "para_id": "6585A5C0",
+    "text_preview": "1.4.2. Tăng cường dữ liệu ảnh\t12",
+    "style_name": "toc 3"
+  },
+  {
+    "index": 29,
+    "para_id": "5334AB56",
+    "text_preview": "KẾT LUẬN\t15",
+    "style_name": "toc 1"
+  },
+  {
+    "index": 30,
+    "para_id": "269DF45C",
+    "text_preview": "TÀI LIỆU THAM KHẢO\t15",
+    "style_name": "toc 1"
+  },
+  {
+    "index": 31,
+    "para_id": "55DA03B3",
+    "text_preview": "DANH MỤC CÁC KÝ HIỆU, CHỮ VIẾT TẮT",
+    "style_name": "Normal"
+  },
+  {
+    "index": 32,
+    "para_id": "27CCBD33",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 33,
+    "para_id": "0ACB56CA",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 34,
+    "para_id": "35CD336A",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 35,
+    "para_id": "1C3A2D8C",
+    "text_preview": "DANH MỤC CÁC HÌNH VẼ",
+    "style_name": "Normal"
+  },
+  {
+    "index": 36,
+    "para_id": "7EF204A2",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 37,
+    "para_id": "25A8C492",
+    "text_preview": "Trang",
+    "style_name": "Normal"
+  },
+  {
+    "index": 38,
+    "para_id": "0682C4FA",
+    "text_preview": "Hình 1.1. Các bước xây dựng mô hình học máy\t4",
+    "style_name": "table of figures"
+  },
+  {
+    "index": 39,
+    "para_id": "61CB5E72",
+    "text_preview": "Hình 1.2. Vai trò của dữ liệu đối với xây dựng và đánh giá mô hình học máy\t5",
+    "style_name": "table of figures"
+  },
+  {
+    "index": 40,
+    "para_id": "51F31B06",
+    "text_preview": "Hình 1.3. Minh hoạ một số phương pháp tăng cường ảnh truyền thống\t13",
+    "style_name": "table of figures"
+  },
+  {
+    "index": 41,
+    "para_id": "49349C0D",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 42,
+    "para_id": "04C2E2D0",
+    "text_preview": "GIỚI THIỆU",
+    "style_name": "Heading 1"
+  },
+  {
+    "index": 43,
+    "para_id": "47DD4FDA",
+    "text_preview": "Nội dung …",
+    "style_name": "Normal_style"
+  },
+  {
+    "index": 44,
+    "para_id": "051169A1",
+    "text_preview": "CƠ SỞ LÝ THUYẾT",
+    "style_name": "Heading 1"
+  },
+  {
+    "index": 45,
+    "para_id": "05E2D782",
+    "text_preview": "Tầm quan trọng dữ liệu ảnh huấn luyện trong thị giác máy tính ",
+    "style_name": "Heading 2"
+  },
+  {
+    "index": 46,
+    "para_id": "3B91656F",
+    "text_preview": "Nội dung...",
+    "style_name": "Normal"
+  },
+  {
+    "index": 47,
+    "para_id": "4A77C03D",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 48,
+    "para_id": "114C20C7",
+    "text_preview": "",
+    "style_name": "Bảng biểu - title"
+  },
+  {
+    "index": 49,
+    "para_id": "450E8917",
+    "text_preview": "Hình .. Các bước xây dựng mô hình học máy",
+    "style_name": "Bảng biểu - title"
+  },
+  {
+    "index": 50,
+    "para_id": "15D7D3CD",
+    "text_preview": "Thu thập dữ liệu ảnh thủ công",
+    "style_name": "Heading 3"
+  },
+  {
+    "index": 51,
+    "para_id": "4C9C80FE",
+    "text_preview": "Nội dung ",
+    "style_name": "Normal_style"
+  },
+  {
+    "index": 52,
+    "para_id": "409677A3",
+    "text_preview": "",
+    "style_name": "Normal"
+  },
+  {
+    "index": 53,
+    "para_id": "37D21BE6",
+    "text_preview": "KẾT LUẬN",
+    "style_name": "Heading 1"
+  },
+  {
+    "index": 54,
+    "para_id": "7AFAB967",
+    "text_preview": "Nội dung...",
+    "style_name": "Normal_style"
+  },
+  {
+    "index": 55,
+    "para_id": "7FA7A178",
+    "text_preview": "TÀI LIỆU THAM KHẢO",
+    "style_name": "Heading 1"
+  },
+  {
+    "index": 56,
+    "para_id": "3F0FE4AF",
+    "text_preview": "The comprehensive Vietnamese virtual assistant on VinFast's electric car - vinbi",
+    "style_name": "List Paragraph"
+  }
+]

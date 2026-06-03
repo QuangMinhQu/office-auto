@@ -234,6 +234,47 @@ def dump_paragraph_sample(doc: Any, max_count: int = 30) -> list[dict]:
     return sample_paras
 
 
+def dump_all_para_ids(doc: Any) -> list[dict]:
+    """Layer 3b: ALL paragraph paraIds — full document, no sampling.
+
+    Returns paraId + text preview (first 80 chars) for every paragraph.
+    Used by validator to check anchors against the FULL template,
+    not just the first 30 paragraphs.
+
+    This is the ground truth for anchor validation.
+    """
+    from docx.oxml.ns import qn
+
+    PARA_ID_NAMESPACES = [
+        qn('w:paraId'),
+        qn('w14:paraId'),
+        '{http://schemas.microsoft.com/office/word/2010/wordml}paraId',
+    ]
+
+    all_paras: list[dict] = []
+    for i, para in enumerate(doc.paragraphs):
+        element = para._element
+
+        para_id = None
+        for ns_qn in PARA_ID_NAMESPACES:
+            para_id = element.get(ns_qn)
+            if para_id:
+                break
+
+        if para_id is None:
+            continue
+
+        entry: dict[str, Any] = {
+            "index": i,
+            "para_id": para_id,
+            "text_preview": (para.text[:80] if para.text else ""),
+            "style_name": para.style.name if para.style else None,
+        }
+        all_paras.append(entry)
+
+    return all_paras
+
+
 def dump_toc_entries(template_path: Path) -> list[dict]:
     """Layer 4: Raw TOC entries from document.xml.
 
@@ -411,6 +452,14 @@ def main() -> None:
     )
     print(f"[docx_inspect]   → {len(toc_entries)} TOC entries written")
 
+    # Layer 3b: ALL paragraph paraIds — full document (for validator)
+    print("[docx_inspect] Layer 3b: all_para_ids (full document) ...")
+    all_para_ids = dump_all_para_ids(doc)
+    Path(run_dir, "docx_inspect_all_para_ids.json").write_text(
+        json.dumps(all_para_ids, ensure_ascii=False, indent=2)
+    )
+    print(f"[docx_inspect]   → {len(all_para_ids)} total paragraphs written")
+
     # Layer 5: Front matter boundary
     print("[docx_inspect] Layer 5: front_matter_boundary ...")
     front_matter = detect_front_matter_boundary(para_sample)
@@ -434,6 +483,7 @@ def main() -> None:
         },
         "styles_raw": styles_raw,
         "paragraph_sample": para_sample,
+        "all_para_ids": all_para_ids,
         "toc_entries_raw": toc_entries,
         "front_matter_boundary": front_matter,
     }
