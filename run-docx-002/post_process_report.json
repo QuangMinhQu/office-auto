@@ -1,7 +1,0 @@
-{
-  "status": "completed",
-  "target_file": "/home/minhquang/office-auto/report.docx",
-  "alignment_fixes": 0,
-  "font_size_fixes": 0,
-  "message": "Applied post-build normalization for known paragraph-level drift."
-}
