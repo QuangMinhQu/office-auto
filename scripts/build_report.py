@@ -1,5 +1,28 @@
 #!/usr/bin/env python3
-"""Chạy pipeline preserve-template-scaffold để sinh report.docx an toàn."""
+"""build_report.py — LLM-as-Reasoning-Engine pipeline (issue.md architecture).
+
+5-step pipeline:
+  1. docx_inspect.py          → raw dump (zero heuristics)
+      ↓ docx_inspect_output.json
+  2. [LLM REASONING]          ← LLM reads raw dump, writes execution_ops.json
+      ↓ execution_ops.json
+  3. docx_validate_ops.py     → warn-only validator
+      ↓ execution_ops_validation.json
+  4. execute_execution_ops.py → mechanical executor (OfficeCLI)
+      ↓ report.docx
+  5. docx_read_result.py      → read back result for verification
+      ↓ result_readback.json
+  6. qa_docx.py / review_docx.py → metrics & summary
+
+Old heuristic scripts (profile_template, plan_mapping, etc.) are archived
+in scripts/legacy/ — they are NOT called by this pipeline.
+
+Usage:
+    python build_report.py --phase inspect    # Step 1: raw dump, wait for LLM
+    python build_report.py --phase execute    # Steps 2-5: LLM ops + execute + read
+    python build_report.py --phase qa         # Step 6: QA metrics
+    python build_report.py --phase all        # Full pipeline (all phases)
+"""
 from __future__ import annotations
 
 import argparse
@@ -25,60 +48,18 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def patch_template_profile(run_dir: Path) -> bool:
-    """Sửa prototype_catalog: TOC1/TOC2/TOC3 → Heading1/Heading2/Heading3.
-
-    Template gốc có thể chứa TOC placeholder paragraphs tại paraId của
-    h1/h2/h3 prototype. Khi profile_template.py đọc những paraId này,
-    style_id sẽ là TOC1/TOC2/TOC3 thay vì Heading1/Heading2/Heading3,
-    khiến plan_mapping ánh xạ sai heading role → QA fail (output_heading_count=0).
-
-    Hàm này sửa template_profile.json sau khi profile_template.py chạy.
-    """
-    tp_path = run_dir / "template_profile.json"
-    if not tp_path.exists():
-        print("[patch_template_profile] template_profile.json không tồn tại, bỏ qua")
-        return True
-
-    with open(tp_path, "r", encoding="utf-8") as f:
-        profile = json.load(f)
-
-    prototype_catalog = profile.get("prototype_catalog", {})
-    changes = 0
-    # Map TOC styles → Heading styles
-    toc_to_heading = {
-        "TOC1": "Heading1",
-        "TOC2": "Heading2",
-        "TOC3": "Heading3",
-        "toc 1": "heading 1",
-        "toc 2": "heading 2",
-        "toc 3": "heading 3",
-    }
-    heading_roles = {"h1", "h2", "h3", "legal_chuong", "legal_dieu", "legal_khoan"}
-    for role in heading_roles:
-        if role not in prototype_catalog:
-            continue
-        pc_entry = prototype_catalog[role]
-        if not isinstance(pc_entry, dict):
-            continue
-        old_style = pc_entry.get("style_id", "")
-        if old_style in toc_to_heading:
-            new_style = toc_to_heading[old_style]
-            pc_entry["style_id"] = new_style
-            changes += 1
-            print(f"[patch_template_profile] {role}: {old_style} → {new_style}")
-
-    if changes > 0:
-        with open(tp_path, "w", encoding="utf-8") as f:
-            json.dump(profile, f, ensure_ascii=False, indent=2)
-        print(f"[patch_template_profile] Đã sửa {changes} prototype entry(s)")
-    else:
-        print("[patch_template_profile] Không cần sửa")
-    return True
-
-
 def run_step(script_name: str, *arguments: str, attempt: int = 1) -> tuple[dict, subprocess.CalledProcessError | None]:
+    """Run a pipeline script and record the result."""
     script_path = PIPELINE / script_name
+    if not script_path.exists():
+        return {
+            "script": script_name,
+            "attempt": attempt,
+            "status": "failed",
+            "returncode": -1,
+            "error": f"Script not found: {script_path}",
+        }, RuntimeError(f"Script not found: {script_path}")
+
     command = [sys.executable, str(script_path), *arguments]
     started_at = timestamp_utc()
     start_time = time.perf_counter()
@@ -119,16 +100,23 @@ def officecli_version() -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Chạy pipeline build DOCX an toàn theo contract preserve-template-scaffold.")
+    parser = argparse.ArgumentParser(
+        description="New pipeline: inspect → (LLM) → execute → QA."
+    )
     parser.add_argument("--run-dir", default=str(BASE / ".office-auto/state/manual-run"))
     parser.add_argument("--source-file", default=str(BASE / "noidung.md"))
-    parser.add_argument("--sample-file", default=None)
     parser.add_argument("--template-file", default=str(TEMPLATE))
     parser.add_argument("--target-file", default=str(TARGET))
-    parser.add_argument("--mode", default="preserve-template-scaffold")
-    parser.add_argument("--ops-file", default=None)
+    parser.add_argument(
+        "--phase",
+        choices=["inspect", "execute", "qa", "all"],
+        default="inspect",
+        help="Pipeline phase to run. 'inspect' runs docx_inspect and waits for LLM. "
+             "'execute' applies execution_ops.json. 'qa' runs QA checks. 'all' runs inspect→execute→qa.",
+    )
+    parser.add_argument("--top-n-styles", type=int, default=None, help="Only dump top N styles (filtering, not classification)")
     args = parser.parse_args()
-    args.run_dir = os.path.abspath(args.run_dir)        # pin absolute path 
+    args.run_dir = os.path.abspath(args.run_dir)
 
     run_dir = Path(args.run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -139,15 +127,11 @@ def main() -> None:
     version = officecli_version()
     preflight = {
         "officecli_version": version,
-        "mode": args.mode,
+        "phase": args.phase,
         "source_file": args.source_file,
-        "sample_file": args.sample_file,
         "template_file": args.template_file,
-        "source_template_file": args.template_file,
-        "effective_template_file": args.template_file,
         "target_file": args.target_file,
         "started_at": started_at,
-        "pipeline_report": str(pipeline_report_path),
     }
     write_json(run_dir / "preflight.json", preflight)
 
@@ -170,183 +154,133 @@ def main() -> None:
             return False
         return False
 
-    if args.ops_file:
-        if not run_and_record("document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
-            pass
-        elif not run_and_record("docx_inspect_raw.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
-            pass
+    # === PHASE: INSPECT ===
+    # This is the ONLY tool script before LLM reasoning.
+    # After this, LLM reads docx_inspect_output.json and writes execution_ops.json.
+    if args.phase in ("inspect", "all"):
+        inspect_args = ["--template-file", args.template_file, "--run-dir", str(run_dir)]
+        if args.top_n_styles:
+            inspect_args.extend(["--top-n-styles", str(args.top_n_styles)])
+
+        success = run_and_record("docx_inspect.py", inspect_args)
+        if not success:
+            failed_step = "docx_inspect.py"
         else:
-            sample_file = args.sample_file or args.template_file
-            preflight["sample_file"] = sample_file
-            write_json(run_dir / "preflight.json", preflight)
-            if failed_step is None and not run_and_record(
-                "input_processor.py",
-                [
-                    "--source-file",
-                    args.source_file,
-                    "--run-dir",
-                    str(run_dir),
-                ],
-            ):
-                pass
-            if failed_step is None and sample_file:
-                if not run_and_record(
-                    "extract_sample_content.py",
-                    [
-                        "--sample-file",
-                        sample_file,
-                        "--run-dir",
-                        str(run_dir),
-                    ],
-                ):
-                    pass
-            if failed_step is None and not run_and_record("parse_markdown.py", ["--source-file", str(run_dir / "normalized.md"), "--run-dir", str(run_dir)]):
-                pass
-            if failed_step is None and not run_and_record(
+            print("\n" + "=" * 70)
+            print("[build_report] ✅ docx_inspect.py hoàn tất.")
+            print("[build_report] raw dump đã ghi tại:")
+            inspect_summary_path = run_dir / "docx_inspect_summary.json"
+            if inspect_summary_path.exists():
+                summary = json.loads(inspect_summary_path.read_text(encoding="utf-8"))
+                for layer, fpath in summary.get("layer_files", {}).items():
+                    print(f"  - {layer}: {fpath}")
+            print("\n[build_report] TIẾP THEO: LLM (session này) đọc raw dump →")
+            print("[build_report] tự suy luận style inheritance, classify headings,")
+            print("[build_report] map markdown → styles, và viết execution_ops.json")
+            print("=" * 70)
+            
+            # Save the fact that inspect completed, waiting for LLM
+            write_json(run_dir / "pipeline_state.json", {
+                "phase": "inspect_completed_waiting_for_llm",
+                "template_file": args.template_file,
+                "source_file": args.source_file,
+                "target_file": args.target_file,
+            })
+
+    # === PHASE: VALIDATE ===
+    # Warn-only validator — checks execution_ops.json against template inspection
+    # Does NOT block execution, only reports warnings for LLM review
+    if args.phase in ("execute", "validate", "all"):
+        ops_file = run_dir / "execution_ops.json"
+        if not ops_file.exists():
+            print(f"\n[build_report] ❌ execution_ops.json không tồn tại tại {run_dir}")
+            print("[build_report] Chạy 'python build_report.py --phase inspect' trước,")
+            print("[build_report] rồi để LLM viết execution_ops.json.")
+            failed_step = "docx_validate_ops.py"
+            exit_code = 1
+        else:
+            success = run_and_record(
                 "docx_validate_ops.py",
-                [
-                    "--run-dir",
-                    str(run_dir),
-                    "--ops-file",
-                    args.ops_file,
-                ],
-            ):
-                pass
-            elif not run_and_record(
-                "compile_execution_ops.py",
-                [
-                    "--run-dir",
-                    str(run_dir),
-                    "--ops-file",
-                    args.ops_file,
-                    "--source-file",
-                    args.source_file,
-                    "--template-file",
-                    args.template_file,
-                    "--target-file",
-                    args.target_file,
-                ],
-            ):
-                pass
-            if failed_step is None and not run_and_record("build_docx.py", ["--run-dir", str(run_dir)], retries=1):
-                pass
-            if failed_step is None and not run_and_record("post_process_docx.py", ["--run-dir", str(run_dir)]):
-                pass
-            if failed_step is None and not run_and_record(
-                "roundtrip_pandoc.py",
-                [
-                    "--run-dir",
-                    str(run_dir),
-                ],
-            ):
-                pass
-            if failed_step is None:
-                run_and_record("qa_docx.py", ["--run-dir", str(run_dir)])
-            if failed_step is None:
-                run_and_record("review_docx.py", ["--run-dir", str(run_dir)])
-    elif not run_and_record("document_topology_detector.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
-        pass
-    elif not run_and_record("docx_inspect_raw.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
-        pass
-    elif not run_and_record("profile_template.py", ["--template-file", args.template_file, "--run-dir", str(run_dir)]):
-        pass
-    elif not patch_template_profile(run_dir):
-        pass
-    elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
-        pass
-    elif not run_and_record(
-        "prepare_template_scaffold.py",
-        ["--template-file", args.template_file, "--run-dir", str(run_dir)],
-    ):
-        pass
-    else:
-        preparation_report = json.loads((run_dir / "template_preparation_report.json").read_text(encoding="utf-8"))
-        effective_template_file = preparation_report.get("effective_template_file", args.template_file)
-        preflight["effective_template_file"] = effective_template_file
-        write_json(run_dir / "preflight.json", preflight)
+                ["--run-dir", str(run_dir)]
+            )
+            if success:
+                print("\n[build_report] ✅ docx_validate_ops.py hoàn tất.")
+                validation_report = run_dir / "execution_ops_validation.json"
+                if validation_report.exists():
+                    val_data = json.loads(validation_report.read_text(encoding="utf-8"))
+                    warning_count = val_data.get("warning_count", 0)
+                    high_count = val_data.get("high_severity_count", 0)
+                    print(f"[build_report]   Warnings: {warning_count} (high: {high_count})")
+                    if warning_count > 0:
+                        print("[build_report] ⚠️  LLM nên review warnings trước khi execute")
+            else:
+                # Validation is warn-only — don't fail pipeline, just warn
+                print(f"\n[build_report] ⚠️  docx_validate_ops.py có lỗi (warn-only, tiếp tục execute)")
 
-        if effective_template_file != args.template_file:
-            if not run_and_record("document_topology_detector.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
-                pass
-            elif not run_and_record("docx_inspect_raw.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
-                pass
-            elif not run_and_record("profile_template.py", ["--template-file", effective_template_file, "--run-dir", str(run_dir)]):
-                pass
-            elif not patch_template_profile(run_dir):
-                pass
-            elif not run_and_record("template_suitability_report.py", ["--run-dir", str(run_dir)]):
-                pass
-        if failed_step is None and not run_and_record("generate_pandoc_style_map.py", ["--run-dir", str(run_dir)]):
-            pass
-        if failed_step is None and not run_and_record(
-            "input_processor.py",
-            [
-                "--source-file",
-                args.source_file,
-                "--run-dir",
-                str(run_dir),
-                "--style-spec-file",
-                str(run_dir / "pandoc_style_spec.json"),
-            ],
-        ):
-            pass
-        sample_file = args.sample_file or effective_template_file
-        preflight["sample_file"] = sample_file
-        write_json(run_dir / "preflight.json", preflight)
-        if failed_step is None and sample_file:
-            if not run_and_record(
-                "extract_sample_content.py",
-                [
-                    "--sample-file",
-                    sample_file,
-                    "--run-dir",
-                    str(run_dir),
-                    "--style-spec-file",
-                    str(run_dir / "pandoc_style_spec.json"),
-                ],
-            ):
-                pass
-        if failed_step is None and not run_and_record("parse_markdown.py", ["--source-file", str(run_dir / "normalized.md"), "--run-dir", str(run_dir)]):
-            pass
-        if failed_step is None and not run_and_record(
-            "plan_mapping.py",
-            [
-                "--mode",
-                args.mode,
-                "--run-dir",
-                str(run_dir),
-                "--source-file",
-                args.source_file,
-                "--template-file",
-                effective_template_file,
-                "--target-file",
-                args.target_file,
-            ],
-        ):
-            pass
-        if failed_step is None and not run_and_record("compile_execution_plan.py", ["--run-dir", str(run_dir)]):
-            pass
-        if failed_step is None and not run_and_record("build_docx.py", ["--run-dir", str(run_dir)], retries=1):
-            pass
-        if failed_step is None and not run_and_record("post_process_docx.py", ["--run-dir", str(run_dir)]):
-            pass
-        if failed_step is None and not run_and_record(
-            "roundtrip_pandoc.py",
-            [
-                "--run-dir",
-                str(run_dir),
-                "--style-spec-file",
-                str(run_dir / "pandoc_style_spec.json"),
-            ],
-        ):
-            pass
-        if failed_step is None:
+    # === PHASE: EXECUTE ===
+    # Apply execution_ops.json mechanically (LLM already decided what to do)
+    if args.phase in ("execute", "all"):
+        # Check if execution_ops.json exists (LLM must have written it)
+        ops_file = run_dir / "execution_ops.json"
+        if not ops_file.exists():
+            print(f"\n[build_report] ❌ execution_ops.json không tồn tại tại {run_dir}")
+            print("[build_report] Chạy 'python build_report.py --phase inspect' trước,")
+            print("[build_report] rồi để LLM viết execution_ops.json.")
+            failed_step = "execute_execution_ops.py"
+            exit_code = 1
+        else:
+            # Copy template to target if needed
+            tpl = Path(args.template_file)
+            tgt = Path(args.target_file)
+            if tpl.exists() and str(tpl) != str(tgt):
+                tgt.parent.mkdir(parents=True, exist_ok=True)
+                import shutil
+                shutil.copy2(str(tpl), str(tgt))
+                print(f"\n[build_report] Copied {tpl} → {tgt}")
+
+            success = run_and_record(
+                "execute_execution_ops.py",
+                ["--run-dir", str(run_dir), "--template-file", args.template_file, "--target-file", args.target_file]
+            )
+            if not success:
+                failed_step = "execute_execution_ops.py"
+            else:
+                print("\n[build_report] ✅ execute_execution_ops.py hoàn tất.")
+
+    # === PHASE: READ RESULT ===
+    # Read back the result DOCX to verify execution
+    if args.phase in ("execute", "read_result", "all"):
+        if not failed_step and (run_dir / "execute_ops_report.json").exists():
+            exec_report = json.loads((run_dir / "execute_ops_report.json").read_text(encoding="utf-8"))
+            if exec_report.get("status") == "completed":
+                run_and_record(
+                    "docx_read_result.py",
+                    ["--run-dir", str(run_dir), "--file", args.target_file]
+                )
+                print("\n[build_report] ✅ docx_read_result.py hoàn tất.")
+
+    # === PHASE: QA ===
+    # Metrics collection only (no intelligence — just measurement)
+    if args.phase in ("qa", "all"):
+        if not failed_step:
+            # Check if target was built
+            if (run_dir / "execute_ops_report.json").exists():
+                exec_report = json.loads((run_dir / "execute_ops_report.json").read_text(encoding="utf-8"))
+                if exec_report.get("status") == "failed":
+                    failed_step = "execute_execution_ops.py"
+
+        if not failed_step:
             run_and_record("qa_docx.py", ["--run-dir", str(run_dir)])
-        if failed_step is None:
             run_and_record("review_docx.py", ["--run-dir", str(run_dir)])
+            # Update pipeline state
+            write_json(run_dir / "pipeline_state.json", {
+                "phase": "qa_completed",
+            })
 
+    # === PIPELINE REPORT ===
     pipeline_report = {
         "status": "failed" if failed_step else "completed",
+        "phase": args.phase,
         "started_at": started_at,
         "finished_at": timestamp_utc(),
         "duration_seconds": round(time.perf_counter() - wrapper_started, 3),
@@ -355,26 +289,21 @@ def main() -> None:
         "source_file": args.source_file,
         "template_file": args.template_file,
         "target_file": args.target_file,
-        "ops_file": args.ops_file,
         "failed_step": failed_step,
         "steps": step_reports,
     }
     write_json(pipeline_report_path, pipeline_report)
 
     if failed_step:
-        print(f"Pipeline dừng tại bước: {failed_step}")
+        print(f"\nPipeline dừng tại bước: {failed_step}")
         print(f"Kiểm tra artifact: {pipeline_report_path}")
         raise SystemExit(exit_code)
 
-    print(f"Đã chạy xong pipeline tại: {run_dir}")
+    print(f"\nĐã chạy xong pipeline tại: {run_dir}")
     print(f"OfficeCLI version: {version}")
-    print(f"Kiểm tra artifact: {run_dir / 'plan.json'}")
-    print(f"Kiểm tra artifact: {run_dir / 'build_report.json'}")
-    print(f"Kiểm tra artifact: {run_dir / 'roundtrip_report.json'}")
+    print(f"Kiểm tra artifact: {run_dir / 'execute_ops_report.json'}")
     print(f"Kiểm tra artifact: {run_dir / 'qa_report.json'}")
     print(f"Kiểm tra artifact: {run_dir / 'preflight.json'}")
-    print(f"Kiểm tra artifact: {pipeline_report_path}")
-
 
 
 if __name__ == "__main__":

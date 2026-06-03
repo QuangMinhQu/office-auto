@@ -13,35 +13,36 @@ Repo này chốt một workflow chuẩn duy nhất cho Markdown -> DOCX bằng O
 Nếu người dùng chỉ prompt ngắn kiểu “sinh report.docx mới” hoặc “đọc task.md và làm”, agent nên đi đúng đường chuẩn trên thay vì tự ghép lệnh ad-hoc.
 Session mới khong duoc mac dinh tai su dung `manual-run` hoac artifact cu neu nguoi dung chua chi ro run can resume.
 
-## Kiến trúc mặc định
+## Kiến trúc: LLM-as-Reasoning-Engine
 
-Workspace này mặc định đi theo kiến trúc mới trong `issue.md`:
+Workspace đi theo kiến trúc mới trong `issue.md`: **"Chỉ những gì không thể suy luận mới trở thành tool. Những gì suy luận được thì LLM làm."**
 
-1. `docx_inspect_raw.py` trả raw inspection của template.
-2. LLM đọc trực tiếp markdown nguồn và tự viết `execution_ops.json`.
-3. `docx_validate_ops.py` chỉ cảnh báo sai anchor/style/path.
-4. `compile_execution_ops.py` + `build_docx.py` + `post_process_docx.py` thực thi cơ học.
-5. `docx_read_result.py` đọc output ra text/structure để model tự verify.
+### 5-step pipeline
 
-Pipeline heuristic cũ vẫn còn trong repo như legacy/debug path, nhưng không còn là đường mặc định cho agent.
+```
+1. docx_inspect.py          → raw dump (zero heuristics, zero interpretation)
+      ↓ docx_inspect_output.json
+2. [LLM REASONING]          ← LLM đọc raw dump + content, viết execution_ops.json
+      ↓ execution_ops.json
+3. docx_validate_ops.py     → warn-only validator (không block execution)
+      ↓ execution_ops_validation.json
+4. execute_execution_ops.py → mechanical executor (OfficeCLI)
+      ↓ report.docx
+5. docx_read_result.py      → read back result để LLM verify
+      ↓ result_readback.json
+6. qa_docx.py / review_docx.py → metrics & summary report
+```
 
-## Runtime requirement
+### Nguyên lý thiết kế
 
-- Cần có `pandoc` trong PATH vì các phase normalize/roundtrip semantic QA đã chuyển từ MarkItDown sang Pandoc.
+- **Raw data only**: `None` = inherited (chưa resolved), không pre-classification, không `heading_level` fields
+- **Scripts = hands, LLM = brain**: Không có heuristic scripts (profile_template, plan_mapping, compile_execution_plan...)
+- **Warn-only validation**: Validator chỉ báo cảnh báo, không block execution
+- **6 ops supported**: `insert_paragraph_after`, `insert_paragraph_before`, `remove`, `update_text`, `insert_table`/`insert_table_after`, `set_page_layout`
 
-## Thứ tự stage chuẩn
+### Old scripts
 
-Flow mặc định cho agent:
-
-1. `docx_inspect_raw.py`
-2. LLM tự viết `execution_ops.json`
-3. `docx_validate_ops.py`
-4. `compile_execution_ops.py`
-5. `build_docx.py`
-6. `post_process_docx.py`
-7. `docx_read_result.py`
-
-Roundtrip/QA legacy vẫn có thể dùng khi cần chẩn đoán sâu, nhưng không còn là primitive default của agent.
+Các heuristic scripts cũ đã được archive vào `scripts/legacy/` — không còn được gọi bởi pipeline mới.
 
 ## Artifact quan trọng
 
@@ -70,15 +71,42 @@ Schema run state nằm ở `.office-auto/run.schema.json`.
 
 ## Cách chạy
 
-Agent/OpenCode nên dùng primitive flow thay vì wrapper legacy. Nếu cần chạy bằng script, dùng nhánh `--ops-file`:
+### Với build_report.py (recommended)
 
 ```bash
-python scripts/build_report.py \
-  --run-dir .office-auto/state/<run_id> \
-  --source-file noidung.md \
-  --template-file format_template.docx \
-  --ops-file execution_ops.json \
-  --target-file report.docx
+# Phase 1: Raw dump template, LLM viết execution_ops.json
+python scripts/build_report.py --phase inspect --run-dir .office-auto/state/<run_id>
+
+# Phase 2: Validate + Execute + Read Result
+python scripts/build_report.py --phase execute --run-dir .office-auto/state/<run_id>
+
+# Phase 3: QA + Review
+python scripts/build_report.py --phase qa --run-dir .office-auto/state/<run_id>
+
+# Hoặc chạy full pipeline
+python scripts/build_report.py --phase all --run-dir .office-auto/state/<run_id>
+```
+
+### Với primitive tools (agent flow)
+
+```bash
+# 1. Inspect
+python .opencode/skills/md-to-docx-pipeline/scripts/docx_inspect.py \
+  --template-file format_template.docx --run-dir .office-auto/state/<run_id>
+
+# 2. LLM writes execution_ops.json (manual or automated)
+
+# 3. Validate
+python .opencode/skills/md-to-docx-pipeline/scripts/docx_validate_ops.py \
+  --run-dir .office-auto/state/<run_id>
+
+# 4. Execute
+python .opencode/skills/md-to-docx-pipeline/scripts/execute_execution_ops.py \
+  --run-dir .office-auto/state/<run_id>
+
+# 5. Read result
+python .opencode/skills/md-to-docx-pipeline/scripts/docx_read_result.py \
+  --run-dir .office-auto/state/<run_id>
 ```
 
 Sau khi build xong, lấy nhanh artifact review mới nhất:
