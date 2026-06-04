@@ -115,6 +115,14 @@ def main() -> None:
              "'execute' applies execution_ops.json. 'qa' runs QA checks. 'all' runs inspect→execute→qa.",
     )
     parser.add_argument("--top-n-styles", type=int, default=None, help="Only dump top N styles (filtering, not classification)")
+    parser.add_argument(
+        "--skeleton-cache-dir", default=None,
+        help="Cache dir for skeleton. If provided, auto-build skeleton before inspect."
+    )
+    parser.add_argument(
+        "--force-skeleton", action="store_true",
+        help="Force skeleton rebuild even if cache exists."
+    )
     args = parser.parse_args()
     args.run_dir = os.path.abspath(args.run_dir)
 
@@ -161,6 +169,10 @@ def main() -> None:
         inspect_args = ["--template-file", args.template_file, "--run-dir", str(run_dir)]
         if args.top_n_styles:
             inspect_args.extend(["--top-n-styles", str(args.top_n_styles)])
+        if args.skeleton_cache_dir:
+            inspect_args.extend(["--skeleton-cache-dir", args.skeleton_cache_dir])
+        if args.force_skeleton:
+            inspect_args.append("--force-skeleton")
 
         success = run_and_record("docx_inspect.py", inspect_args)
         if not success:
