@@ -10,10 +10,13 @@ license: MIT
 Cung cap bo primitive callable de agent reasoning DOCX ma khong can compose shell command dai trong prompt.
 
 ## Cac tool chinh
-- `docx_pipeline_inspectTemplate`
-- `docx_pipeline_validateExecutionOps`
-- `docx_pipeline_applyExecutionOps`
-- `docx_pipeline_readResult`
+- `inspectTemplate`
+- `validateExecutionOps`
+- `applyExecutionOps`
+- `prepareInsertPlan`
+- `reviewOutput`
+- `readResult`
+- `runPipeline`
 
 ## Contract
 - Tool duoc dinh nghia tai `.opencode/tools/docx_pipeline.ts`.

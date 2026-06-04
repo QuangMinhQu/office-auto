@@ -8,7 +8,7 @@ Repo này chốt một workflow chuẩn duy nhất cho Markdown -> DOCX bằng O
 - Template mặc định: `format_template.docx`.
 - File đích mặc định: `report.docx`.
 - Primitive tools chuẩn: `inspectTemplate`, `validateExecutionOps`, `applyExecutionOps`, `readResult`.
-- Contract mặc định cho agent: `task.md`.
+ - Contract mặc định cho agent: `task.md`.
 
 Nếu người dùng chỉ prompt ngắn kiểu “sinh report.docx mới” hoặc “đọc task.md và làm”, agent nên đi đúng đường chuẩn trên thay vì tự ghép lệnh ad-hoc.
 Session mới khong duoc mac dinh tai su dung `manual-run` hoac artifact cu neu nguoi dung chua chi ro run can resume.
@@ -71,7 +71,7 @@ Schema run state nằm ở `.office-auto/run.schema.json`.
 
 ## Cách chạy
 
-### Với build_report.py (recommended)
+ ### Với build_report.py (legacy wrapper)
 
 ```bash
 # Phase 1: Raw dump template, LLM viết execution_ops.json
@@ -87,7 +87,7 @@ python scripts/build_report.py --phase qa --run-dir .office-auto/state/<run_id>
 python scripts/build_report.py --phase all --run-dir .office-auto/state/<run_id>
 ```
 
-### Với primitive tools (agent flow)
+ ### Với primitive tools (agent flow)
 
 ```bash
 # 1. Inspect
@@ -121,7 +121,7 @@ Workspace đã được cấu hình để OpenCode/Copilot Agent đi đúng work
 
 - `.opencode/AGENTS.md`: routing + hard gate.
 - `task.md`: contract chuẩn cho prompt tối giản.
-- `.vscode/mcp.json`: OfficeCLI MCP cho workspace.
+- `.opencode/tools/docx_pipeline.ts`: custom tools chuẩn của workspace.
 - `.vscode/tasks.json`: task build DOCX, latest review summary, unit tests.
 - `.vscode/settings.json`: bật MCP auto-start và unittest config.
 

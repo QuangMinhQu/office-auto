@@ -37,7 +37,7 @@ officecli help docx <element> --json
 
 Với mutation, đây là hard rule:
 - Trước mỗi `officecli add` hoặc `officecli set`, nếu chưa chắc schema, phải chạy `officecli help docx <element> --json`.
-- Nếu agent đã có OfficeCLI MCP server, ưu tiên MCP tool calls tương đương thay vì shell.
+- Nếu agent đã có một MCP server OfficeCLI thật, ưu tiên MCP tool calls tương đương thay vì shell.
 
 ### 2. Kỷ luật shell
 - Luôn quote đường dẫn semantic path như `"/body/p[1]"`.

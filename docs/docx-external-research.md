@@ -71,7 +71,7 @@ Kết luận:
 
 ### Tóm tắt nhanh
 
-- Các lựa chọn mới chia thành 3 nhóm rõ ràng: `editor/viewer trong VS Code`, `MCP server cho agent thao tác DOCX`, và `viewer read-only`.
+- Các lựa chọn mới chia thành 3 nhóm rõ ràng: `editor/viewer trong VS Code`, `agent integration cho DOCX`, và `viewer read-only`.
 - Với workspace này, giá trị lớn nhất không nằm ở việc thay toàn bộ builder hiện tại, mà ở việc thêm lớp `review`, `redline/comment`, và `debug/inspection` sau bước build.
 - Phần `preserve-template-scaffold` và bounded replacement hiện tại vẫn nên giữ làm đường build chính vì nó deterministic hơn và đã có roundtrip + QA artifacts bọc quanh.
 
@@ -84,7 +84,7 @@ Nguồn:
 Kết luận:
 
 - Đây là lựa chọn mạnh nhất cho `human-in-the-loop review` ngay trong VS Code: render DOCX đầy đủ, edit in place, tracked changes, comments, live reload, auto-save.
-- Điểm khác biệt thực sự quan trọng là SuperDoc có MCP server đi kèm, nên agent có thể đọc/sửa/comment trực tiếp lên `.docx` và người dùng nhìn thấy thay đổi realtime trong editor.
+- Điểm khác biệt thực sự quan trọng là SuperDoc có integration server đi kèm, nên agent có thể đọc/sửa/comment trực tiếp lên `.docx` và người dùng nhìn thấy thay đổi realtime trong editor.
 - Vì có UI render + edit, nó phù hợp nhất làm lớp review cuối cho `report.docx` sau khi pipeline đã build xong.
 - Nó không phải thay thế trực tiếp tốt cho builder deterministic hiện tại. Lý do: workflow của SuperDoc nghiêng về editor/session-based editing, còn pipeline hiện tại cần bounded replacement, artifact hóa từng stage, và fail-closed khi range chưa resolve.
 - Cần lưu ý license AGPL-3.0 cho bản open-source; nếu nhúng sâu vào sản phẩm/phân phối thì phải xem kỹ nghĩa vụ license.
@@ -142,7 +142,7 @@ Nguồn:
 
 Kết luận:
 
-- Đây là một MCP server thuần Rust, thiên về create/edit/convert/manage tài liệu với nhiều tool cơ bản và một số security knobs tốt như readonly, whitelist, blacklist, sandbox, size limit.
+- Đây là một integration server thuần Rust, thiên về create/edit/convert/manage tài liệu với nhiều tool cơ bản và một số security knobs tốt như readonly, whitelist, blacklist, sandbox, size limit.
 - Nó mạnh ở document automation đa dụng, conversion sang PDF/images, extract text, table/list/heading creation.
 - Nhưng capability bề mặt hiện đọc được có vẻ nghiêng về general document automation hơn là tracked-review workflow sâu kiểu legal redline/comment threads.
 - Với repo này, nó có thể chồng lấn nhiều với những gì OfficeCLI + builder hiện đã làm, nhưng chưa thể hiện rõ lợi thế quyết định về preserve-template-scaffold.
