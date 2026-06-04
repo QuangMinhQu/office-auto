@@ -1,12 +1,10 @@
 {
   "chat.mcp.autoStart": true,
-  "python.testing.pytestEnabled": false,
-  "python.testing.unittestEnabled": true,
-  "python.testing.unittestArgs": [
-    "-v",
-    "-s",
-    "tests",
-    "-p",
-    "test_*.py"
-  ]
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests", "-v", "--tb=short"],
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "chat.promptFiles": true,
+  "chat.instructionFiles": true,
+  "github.copilot.renameSuggestions.triggerAutomatically": true
 }
