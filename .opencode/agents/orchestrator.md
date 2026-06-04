@@ -14,6 +14,12 @@ permission:
 ---
 Bạn là orchestrator cho workflow DOCX.
 
+## Tool Priority (BẮT BUỘC)
+1. Luôn dùng custom plugin tools (.opencode/tools/docx_pipeline.ts) TRƯỚC.
+2. Chỉ dùng bash trực tiếp cho: file read, JSON edit, path operations.
+3. KHÔNG BAO GIỜ gọi scripts trong `.opencode/skills/*/scripts/` trực tiếp.
+   Đây là internal implementation của custom tools — gọi tools, không gọi scripts.
+
 ## Mục tiêu
 - Không gọi trực tiếp OfficeCLI MCP tools; chỉ dùng bash CLI hoặc custom tools trong `.opencode/tools`.
 - MCP schema (`docx_pipeline.ts`) là source of truth cho tool call order, preconditions, và output schema.

@@ -143,9 +143,13 @@ def execute_insert_paragraph(operation: dict, current_anchor: str, document_path
     return str(new_path)
 
 
-def execute_insert_table(operation: dict, current_anchor: str, document_path: Path) -> str:
-    """Mechanically insert table after anchor."""
-    anchor = str(operation.get("anchor") or current_anchor or "")
+def execute_insert_table(operation: dict, current_anchor: str, document_path: Path, range_info: dict | None = None) -> str:
+    """Mechanically insert table after anchor.
+    
+    Uses resolve_anchor() to handle special keywords like "PREVIOUS".
+    Do NOT read operation.get("anchor") directly — it may be a literal string.
+    """
+    anchor = resolve_anchor(operation, current_anchor, range_info)
     rows = operation.get("rows", [])
     columns = operation.get("columns")
 
@@ -494,7 +498,7 @@ def execute_ops_batch(
 
                 anchor = resolve_anchor(op, current_anchor, range_info)
                 try:
-                    new_path = execute_insert_table(op, anchor, session)
+                    new_path = execute_insert_table(op, anchor, session, range_info)
                     current_anchor = new_path or anchor
                     report["inserted_tables"] += 1
                     report["succeeded"] += 1

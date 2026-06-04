@@ -10,7 +10,8 @@ license: MIT
 Scripts là tay, LLM là não.
 
 1. `docx_inspect.py` — raw dump, zero heuristics
-2. **[LLM REASONING]** — đọc dump + markdown, viết `execution_ops.json`
+1b. `prepareInsertPlan` — build reasoning scaffold (BẮT BUỘC)
+2. **[LLM REASONING]** — đọc scaffold + markdown, viết `execution_ops.json`
 3. `docx_validate_ops.py` — warn-only validator
 4. `execute_execution_ops.py` — mechanical executor
 5. `docx_read_result.py` — readback để verify
@@ -35,21 +36,31 @@ Scripts là tay, LLM là não.
 | `review_report.json` / `review_report.md` / `review_screen.html` | Semantic review artifacts |
 | `result_readback.json` | Output DOCX readback |
 
-## Helper Tools
+## Required Steps
 
-- `prepareInsertPlan` — aggregate inspection + markdown headings into a compact scaffold
-- `reviewOutput` — run review_docx.py and expose review artifacts
+1. `prepareInsertPlan` — aggregate inspection + markdown headings into a compact scaffold (BẮT BUỘC)
+2. `reviewOutput` — run review_docx.py and expose review artifacts (optional, post-build)
 
 ## LLM Reasoning Chain
 
 ### Bước 1 — Page layout
 Đọc `page_layout_raw` từ `docx_inspect_output.json`. Convert twips → mm: `1 twip = 1/1440 inch = 0.0176mm`.
 
+### Bước 1b — Prepare insert plan (BẮT BUỘC)
+Gọi `prepareInsertPlan` tool để nhận scaffold JSON chứa:
+- `markdown_headings[]` — list heading từ noidung.md (level + text)
+- `recommended_insert_anchor` — paraId tốt nhất để chèn body
+- `body_text_style` — style name cho body text (từ template)
+- `do_not_use_styles` — list styles cần tránh
+
+Scaffold này nhỏ (~10-20 ops equivalent) thay vì đọc toàn bộ noidung.md.
+
 ### Bước 2 — Style inheritance tree
 Đọc `styles_raw`. `space_before_pt: null` = inherited — để LLM interpret.
 
 ### Bước 3 — Classify document type
-Đọc `paragraph_sample` + `toc_entries_raw` + `noidung.md`. Xác định academic/legal/etc.
+Đọc `markdown_headings` từ scaffold (Bước 1b) + `toc_entries_raw`. Xác định academic/legal/etc.
+**KHÔNG đọc toàn bộ noidung.md** — chỉ cần heading structure để classify.
 
 ### Bước 4 — Map markdown → Word styles
 - `# heading` → `Heading 1` (outline_level_xml: 0)
@@ -63,30 +74,52 @@ Anchor convention:
 - Op đầu tiên: `/body/p[@paraId=XXXX]` từ `all_para_ids.json`
 - Các op tiếp theo: `"PREVIOUS"` — executor tự động track last inserted path
 
-Mỗi op phải có đầy đủ `run_props` và `para_props` explicit — không inherit.
+#### run_props Policy
+- **KHÔNG bao giờ** set `run_props.font`, `run_props.size` cho heading ops → inherit từ style
+- `run_props` chỉ dùng cho body text khi cần override (bold, italic inline)
+- `para_props` chỉ set nếu template không có default hoặc cần thay đổi rõ ràng
 
-Khi có `docx_inspect_content_map.json`, ưu tiên dùng `recommended_insert_anchor` và tránh remove front-matter paragraphs.
+#### Template Placeholder Rule
+Sau khi viết tất cả insert ops, LUÔN thêm remove ops cho:
+- Tất cả paragraphs trong `body_placeholders` (từ `content_map.json`)
+- **NGOẠI TRỪ**: front_matter paragraphs (TOC, title page, danh mục)
+- **NGOẠI TRỪ**: `recommended_insert_anchor` paragraph (chính là điểm neo)
+Remove ops phải được viết trong CÙNG `execution_ops.json` với insert ops,
+không được tách thành 2 file riêng hay 2 lần chạy executor.
+
+#### execution_ops Schema
+Mỗi op phải có field `role` để executor/validator phân biệt heading vs body:
+- `role: "h1" | "h2" | "h3"` cho headings
+- `role: "body"` cho body text
+- `role: "toc"` cho TOC entries
 
 ```json
-[
-  {
-    "op": "insert_paragraph_after",
-    "anchor": "/body/p[@paraId=49349C0D]",
-    "style": "Heading1",
-    "text": "CHƯƠNG 1. CƠ SỞ LÝ THUYẾT",
-    "run_props": { "font": "Times New Roman", "size_pt": 14, "bold": true },
-    "para_props": { "space_before_pt": 12, "space_after_pt": 6, "line_spacing": 1.5 },
-    "bookmark": "_Toc_ch1"
-  },
-  {
-    "op": "insert_paragraph_after",
-    "anchor": "PREVIOUS",
-    "style": "BodyText",
-    "text": "Nội dung chương 1...",
-    "run_props": { "font": "Times New Roman", "size_pt": 13 },
-    "para_props": { "first_line_indent_pt": 36, "line_spacing": 1.5 }
-  }
-]
+{
+  "version": "2",
+  "ops": [
+    {
+      "op": "insert_paragraph_after",
+      "role": "h1",
+      "anchor": "/body/p[@paraId=49349C0D]",
+      "style": "Heading1",
+      "text": "CHƯƠNG 1. CƠ SỞ LÝ THUYẾT",
+      "bookmark": "_Toc_ch1"
+    },
+    {
+      "op": "insert_paragraph_after",
+      "role": "body",
+      "anchor": "PREVIOUS",
+      "style": "BodyText",
+      "text": "Nội dung chương 1...",
+      "run_props": { "font": "Times New Roman", "size_pt": 13 },
+      "para_props": { "first_line_indent_pt": 36, "line_spacing": 1.5 }
+    },
+    {
+      "op": "remove",
+      "path": "/body/p[@paraId=PLACEHOLDER_ID]"
+    }
+  ]
+}
 ```
 
 ### Supported ops

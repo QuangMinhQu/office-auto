@@ -7,7 +7,52 @@ from pathlib import Path
 from typing import Any
 
 from officecli_native import ensure_officecli_available, officecli_query, read_json, write_json
-from profile_template import build_body_paragraphs
+
+
+def build_body_paragraphs(paragraph_results: list[dict]) -> list[dict]:
+    """Inline replacement for legacy profile_template.build_body_paragraphs.
+    
+    Collects body paragraphs from query results with format profile extraction.
+    """
+    body_paragraphs: list[dict] = []
+    for idx, result in enumerate(paragraph_results):
+        path = str(result.get("path", ""))
+        if not path.startswith("/body/"):
+            continue
+        
+        text = str(result.get("text") or "").strip()
+        fmt = result.get("format", {})
+        style_name = fmt.get("styleName") or result.get("style") or fmt.get("style")
+        style_id = fmt.get("styleId")
+        
+        format_profile = {
+            "align": fmt.get("effective.align") or fmt.get("align"),
+            "size": fmt.get("effective.size") or fmt.get("size"),
+            "font": fmt.get("effective.font.ascii") or fmt.get("font.ascii") or fmt.get("font.latin"),
+            "first_line_indent": fmt.get("effective.firstLineIndent") or fmt.get("firstLineIndent"),
+            "line_spacing": fmt.get("effective.lineSpacing") or fmt.get("lineSpacing"),
+            "space_before": fmt.get("effective.spaceBefore") or fmt.get("spaceBefore"),
+            "space_after": fmt.get("effective.spaceAfter") or fmt.get("spaceAfter"),
+            "list_style": fmt.get("effective.listStyle") or fmt.get("listStyle"),
+        }
+        
+        bookmarks = {
+            child.get("format", {}).get("name")
+            for child in result.get("children", [])
+            if child.get("type") == "bookmark" and child.get("format", {}).get("name")
+        }
+        
+        body_paragraphs.append({
+            "index": idx,
+            "path": path,
+            "text": text,
+            "style": style_name,
+            "style_id": style_id,
+            "format_profile": format_profile,
+            "bookmarks": bookmarks,
+        })
+    
+    return body_paragraphs
 
 
 DISPLAY_LIMIT = 40
@@ -184,15 +229,30 @@ def document_snapshot(document: Path) -> dict:
     }
 
 
-def inserted_paragraph_reviews(execution_plan: dict, build_report: dict, target_snapshot: dict, prototype_catalog: dict) -> tuple[list[dict], dict]:
+def inserted_paragraph_reviews(execution_ops: dict, build_report: dict, target_snapshot: dict, prototype_catalog: dict) -> tuple[list[dict], dict]:
+    """Review inserted paragraphs from execution_ops (new pipeline schema).
+    
+    execution_ops can be:
+    - New schema: {"version": "2", "ops": [...]}
+    - Legacy schema: {"render_ops": [...]}
+    - Legacy list: [...]
+    """
     target_by_path = {str(paragraph.get("path")): paragraph for paragraph in target_snapshot.get("paragraphs", [])}
-    render_ops = execution_plan.get("render_ops", [])
+    
+    # Handle new pipeline schema
+    if isinstance(execution_ops, dict):
+        render_ops = execution_ops.get("ops", [])
+    elif isinstance(execution_ops, list):
+        render_ops = execution_ops
+    else:
+        render_ops = execution_ops.get("render_ops", [])
+    
     inserted_paths = build_report.get("inserted_paths", [])
     review_items: list[dict] = []
     risk_counter: Counter[str] = Counter()
 
     for index, operation in enumerate(render_ops):
-        if operation.get("kind") != "paragraph":
+        if operation.get("op") != "insert_paragraph_after" and operation.get("op") != "insert_paragraph_before":
             continue
         if index >= len(inserted_paths):
             continue
@@ -212,7 +272,7 @@ def inserted_paragraph_reviews(execution_plan: dict, build_report: dict, target_
                 "index": len(review_items),
                 "path": inserted_path,
                 "role": operation.get("role"),
-                "block_type": operation.get("block_type"),
+                "block_type": operation.get("op"),
                 "text": str(paragraph.get("text") or "")[:220],
                 "expected": expected,
                 "actual": actual_profile(paragraph),
@@ -447,15 +507,23 @@ def main() -> None:
 
     run_dir = Path(args.run_dir)
     run_state = read_json(run_dir / "run.json")
+    
+    # New pipeline: read execution_ops.json (versioned schema)
+    execution_ops = read_json(run_dir / "execution_ops.json") if (run_dir / "execution_ops.json").exists() else {}
+    
+    # New pipeline: read execute_ops_report.json
+    build_report = read_json(run_dir / "execute_ops_report.json") if (run_dir / "execute_ops_report.json").exists() else {}
+    
+    # Legacy fallbacks
     preflight = read_json(run_dir / "preflight.json") if (run_dir / "preflight.json").exists() else {}
     plan = read_json(run_dir / "plan.json") if (run_dir / "plan.json").exists() else {}
     execution_plan = read_json(run_dir / "execution_plan.json") if (run_dir / "execution_plan.json").exists() else {}
-    build_report = read_json(run_dir / "build_report.json") if (run_dir / "build_report.json").exists() else {}
+    legacy_build_report = read_json(run_dir / "build_report.json") if (run_dir / "build_report.json").exists() else {}
     qa_report = read_json(run_dir / "qa_report.json") if (run_dir / "qa_report.json").exists() else {}
     template_profile = read_json(run_dir / "template_profile.json") if (run_dir / "template_profile.json").exists() else {}
     preparation_report = read_json(run_dir / "template_preparation_report.json") if (run_dir / "template_preparation_report.json").exists() else {}
 
-    target_file = Path(run_state.get("target_file") or plan.get("target_file") or build_report.get("target_file") or "")
+    target_file = Path(run_state.get("target_file") or plan.get("target_file") or build_report.get("target_file") or legacy_build_report.get("target_file") or "")
     if not target_file.exists():
         review_report = {
             "status": "blocked",
@@ -470,7 +538,7 @@ def main() -> None:
     baseline_snapshot = document_snapshot(baseline_file)
     target_snapshot = document_snapshot(target_file)
     inserted_reviews, inserted_summary = inserted_paragraph_reviews(
-        execution_plan,
+        execution_ops,
         build_report,
         target_snapshot,
         template_profile.get("prototype_catalog", {}),

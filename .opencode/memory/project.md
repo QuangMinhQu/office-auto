@@ -13,3 +13,10 @@
     prepare_template_scaffold.py, patch_template_profile(), template_suitability_report.py
 - Style contract: heading paragraphs must keep style inheritance from template; avoid direct font/size overrides on heading roles.
 - Tooling contract: do not call OfficeCLI MCP tools directly; use bash CLI or custom tools wrappers.
+
+## OfficeCLI Usage Policy
+OfficeCLI MCP chỉ dùng cho:
+- Bootstrap: cài đặt skills, MCP registration (officecli-mcp skill)
+- Emergency view: khi tất cả custom tools fail và cần debug raw
+OfficeCLI KHÔNG dùng trong normal build flow — custom pipeline tools là
+source of truth cho mọi inspection và mutation.

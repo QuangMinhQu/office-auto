@@ -8,7 +8,7 @@
 ## Quy Định Vận Hành
 
 - **Agent chính:** `orchestrator`.
-- **Không gọi trực tiếp** OfficeCLI MCP tools; chỉ dùng qua bash CLI hoặc custom tools trong `.opencode/tools`.
+- **Không gọi trực tiếp** OfficeCLI MCP tools; luôn ưu tiên custom tools trong `.opencode/tools`. Bash chỉ dùng cho file operations (read/write/edit JSON).
 - **Không đọc** artifact trong `.office-auto/state/<run_id>/` nếu chưa xác định chính xác `run_id`.
 - **Không trộn** custom tools với bash ad-hoc trong cùng một flow build/verify.
 - MCP schema (`.opencode/tools/docx_pipeline.ts`) là source of truth cho tool call order và preconditions.
