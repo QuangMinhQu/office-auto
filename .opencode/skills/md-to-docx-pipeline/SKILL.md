@@ -171,3 +171,40 @@ Mechanical executor. Đọc execution_ops.json, apply từng op qua OfficeCLI. R
 - Mỗi script chạy lại được mà không hỏng run state.
 - `execution_ops.json` là source of truth.
 - Scripts heuristic cũ đã archive trong `scripts/legacy/`.
+
+## Skeleton Pipeline Config
+
+Khi template > 500 paragraphs, pipeline TỰ ĐỘNG bật skeleton mode.
+LLM KHÔNG cần biết điều này — artifact structure giữ nguyên.
+
+### Cách hoạt động
+- `docx_inspect.py` nhận thêm `--skeleton-cache-dir` argument
+- Nếu cache miss → `skeleton_builder.py` build skeleton (~10-20KB)
+- Skeleton giữ: front matter, styles, header/footer, page layout, section properties
+- Skeleton loại: body content placeholders (paragraphs/tables sau front matter)
+- Hash-based cache: SHA-256 template file → tự động invalidation khi template thay đổi
+- `--force-skeleton` flag để force rebuild
+
+### Artifact mới
+| File | Mô tả |
+|---|---|
+| `template_skeleton.docx` | Skeleton DOCX (~10-20KB) dùng cho inspection |
+| `.office-auto/cache/skeletons/{hash}.meta.json` | Cache metadata |
+| `.office-auto/cache/skeletons/{hash}.skeleton.docx` | Cached skeleton |
+
+## Fallback Protocol: all_para_ids rỗng
+
+**Trigger**: `recommended_insert_anchor` = null VÀ `all_para_ids` = []
+
+**Mandatory behavior** (theo thứ tự):
+1. Check `paragraph_sample` — dùng `IDX_{body_start_index:05d}` làm anchor đầu tiên
+2. Sau op đầu tiên → `"anchor": "PREVIOUS"` cho mọi op tiếp theo  
+3. **KHÔNG** speculate về cơ chế PREVIOUS khi chưa có anchor đầu tiên
+4. **KHÔNG** gọi runPipeline khi chưa viết execution_ops.json
+5. Nếu không resolve được anchor nào → abort với explicit error message
+
+### IDX_ Synthetic paraIds
+- Khi paragraph không có `w14:paraId`, script inject `IDX_XXXXX` format
+- Validator KHÔNG warn HIGH severity cho synthetic IDs
+- Executor resolve `IDX_XXXXX` → real paraId qua `body._element` iteration
+- Nếu không resolve được → fallback PREVIOUS

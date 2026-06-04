@@ -336,6 +336,44 @@ def execute_set_page_layout(operation: dict, document_path: Path) -> str:
     return "page_layout"
 
 
+def resolve_idx_anchor(anchor_str: str, doc) -> str | None:
+    """Resolve IDX_XXXXX synthetic anchor → OfficeCLI path.
+
+    Iterates body._element directly (not doc.paragraphs) to account
+    for tables shifting paragraph index.
+
+    Returns OfficeCLI path like /body/p[@paraId=XXXXX] if a real paraId
+    is found at the target index, or None if not resolvable.
+    """
+    if not anchor_str.startswith("IDX_"):
+        return None
+
+    from lxml import etree
+    from docx.oxml.ns import qn
+
+    W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+    try:
+        target_idx = int(anchor_str[4:])
+    except ValueError:
+        return None
+
+    body = doc.element.body
+    para_index = 0
+
+    for child in body:
+        if etree.QName(child.tag).localname != "p":
+            continue
+        if para_index == target_idx:
+            # Try to get real paraId for OfficeCLI path
+            para_id = child.get(f"{{{W14}}}paraId")
+            if para_id:
+                return f"/body/p[@paraId={para_id}]"
+            return None  # cannot resolve — caller fallback
+        para_index += 1
+
+    return None
+
+
 def resolve_anchor(op: dict, current_anchor: str, range_info: dict | None) -> str:
     """Resolve anchor for an operation.
 
@@ -343,6 +381,7 @@ def resolve_anchor(op: dict, current_anchor: str, range_info: dict | None) -> st
     Special keywords:
       - "PREVIOUS" / "previous" → use current_anchor (last inserted/processed path)
       - "selected" → use range_info.insert_after_path if available
+      - "IDX_XXXXX" → resolve to real paraId via body._element iteration
     """
     explicit_anchor = op.get("anchor")
     anchor_str = str(explicit_anchor).strip() if explicit_anchor else ""
@@ -350,6 +389,11 @@ def resolve_anchor(op: dict, current_anchor: str, range_info: dict | None) -> st
     # Handle "PREVIOUS" keyword FIRST — use the last processed anchor
     if anchor_str and anchor_str.upper() == "PREVIOUS":
         return current_anchor
+
+    # Handle IDX_ synthetic anchors — resolve to real paraId
+    if anchor_str.startswith("IDX_"):
+        # This is handled by the caller with access to doc object
+        return anchor_str
 
     # Handle other explicit anchors
     if explicit_anchor and anchor_str:

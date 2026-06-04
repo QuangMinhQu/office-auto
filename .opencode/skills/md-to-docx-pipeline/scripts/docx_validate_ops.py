@@ -61,6 +61,7 @@ def collect_known_para_ids(template_inspection: dict) -> set[str]:
     2. paragraph_sample — first N paragraphs (fallback, limited to 30)
 
     This ensures anchors beyond the first 30 paragraphs are still validated.
+    Recognizes IDX_XXXXX synthetic paraIds as valid format.
     """
     para_ids: set[str] = set()
 
@@ -78,6 +79,22 @@ def collect_known_para_ids(template_inspection: dict) -> set[str]:
                 para_ids.add(str(pid))
 
     return para_ids
+
+
+def has_synthetic_para_ids(template_inspection: dict) -> bool:
+    """Check if template inspection contains IDX_ synthetic paraIds.
+
+    Returns True if any paraId starts with 'IDX_' prefix.
+    """
+    for entry in template_inspection.get("all_para_ids", []):
+        pid = entry.get("para_id", "")
+        if str(pid).startswith("IDX_"):
+            return True
+    for entry in template_inspection.get("paragraph_sample", []):
+        pid = entry.get("para_id", "")
+        if str(pid).startswith("IDX_"):
+            return True
+    return False
 
 
 def collect_front_matter_para_ids(template_inspection: dict) -> set[str]:
@@ -160,7 +177,7 @@ def collect_known_paths(template_inspection: dict) -> set[str]:
     return known_paths
 
 
-def resolve_anchor_for_op(operation: dict, known_paths: set[str], known_para_ids: set[str]) -> tuple[str, bool]:
+def resolve_anchor_for_op(operation: dict, known_paths: set[str], known_para_ids: set[str], has_synthetic: bool = False) -> tuple[str, bool]:
     """Resolve and validate anchor for an operation.
 
     Returns (resolved_anchor, is_valid).
@@ -172,6 +189,12 @@ def resolve_anchor_for_op(operation: dict, known_paths: set[str], known_para_ids
         return str(anchor) if anchor else "sequential", True
 
     anchor_str = str(anchor)
+
+    # Handle IDX_ synthetic anchors — valid format, not HIGH severity
+    if anchor_str.startswith("IDX_"):
+        if has_synthetic:
+            return anchor_str, True  # synthetic ID is valid in this template
+        return anchor_str, False
 
     # Check if anchor is a paraId reference
     if anchor_str.startswith("/body/p[@paraId="):
@@ -200,6 +223,7 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
     known_para_ids = collect_known_para_ids(template_inspection)
     front_matter_para_ids = collect_front_matter_para_ids(template_inspection)
     style_effective_fonts = collect_style_effective_fonts(template_inspection)
+    has_synthetic = has_synthetic_para_ids(template_inspection)
 
     # Check if ops_payload has ops array or is itself the ops array
     if isinstance(ops_payload, list):
@@ -232,7 +256,7 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
                     "severity": "medium",
                 })
             else:
-                resolved, is_valid = resolve_anchor_for_op(operation, known_paths, known_para_ids)
+                resolved, is_valid = resolve_anchor_for_op(operation, known_paths, known_para_ids, has_synthetic)
                 if not is_valid:
                     warnings.append({
                         "op_index": index,

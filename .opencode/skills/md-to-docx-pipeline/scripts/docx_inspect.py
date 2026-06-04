@@ -337,6 +337,9 @@ def dump_paragraph_sample(doc: Any, max_count: int = 30) -> list[dict]:
 def dump_all_para_ids(doc: Any, *, front_matter_boundary: dict[str, Any] | None = None, theme_fonts: dict[str, str | None] | None = None) -> list[dict]:
     """Layer 3b: ALL paragraph paraIds — full document, no sampling.
 
+    Iterates body._element directly (not doc.paragraphs) to handle tables
+    correctly and provide IDX_ synthetic fallback for paragraphs missing paraId.
+
     Returns paraId + text preview (first 80 chars) for every paragraph.
     Used by validator to check anchors against the FULL template,
     not just the first 30 paragraphs.
@@ -355,29 +358,96 @@ def dump_all_para_ids(doc: Any, *, front_matter_boundary: dict[str, Any] | None 
     front_matter_last_para_id = (front_matter_boundary or {}).get("last_para_id")
     front_matter_body_start = (front_matter_boundary or {}).get("body_start_index")
     front_matter_active = True if front_matter_last_para_id is not None else isinstance(front_matter_body_start, int)
-    for i, para in enumerate(doc.paragraphs):
-        para_id = get_para_id(para)
 
-        if para_id is None:
-            continue
+    # Iterate body._element directly (handles tables, paragraphs, etc.)
+    body = doc.element.body if hasattr(doc, 'element') and hasattr(doc.element, 'body') else None
+    para_index = 0
 
-        is_front_matter = front_matter_active
-        if front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and i >= int(front_matter_body_start):
-            is_front_matter = False
+    if body is not None:
+        for child in body:
+            tag = etree.QName(child.tag).localname
+            if tag == "sectPr":
+                break  # stop at section properties
+            if tag != "p":
+                continue  # skip tables, etc.
 
-        entry: dict[str, Any] = {
-            "index": i,
-            "para_id": para_id,
-            "text_preview": (para.text[:80] if para.text else ""),
-            "style_name": para.style.name if para.style else None,
-            "effective_font": resolve_effective_font(para, theme_fonts or {}),
-            "is_front_matter": is_front_matter,
-        }
-        if front_matter_last_para_id and para_id == front_matter_last_para_id:
-            front_matter_active = False
-        elif front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and i >= int(front_matter_body_start):
-            front_matter_active = False
-        all_paras.append(entry)
+            # Try real paraId
+            para_id = None
+            for ns_qn in PARA_ID_NAMESPACES:
+                para_id = child.get(ns_qn)
+                if para_id:
+                    break
+
+            is_synthetic = False
+            if para_id is None:
+                # Fallback: synthetic IDX_ paraId
+                para_id = f"IDX_{para_index:05d}"
+                is_synthetic = True
+
+            # Determine is_front_matter
+            is_front_matter = front_matter_active
+            if front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and para_index >= int(front_matter_body_start):
+                is_front_matter = False
+
+            # Get text preview
+            text_content = child.text_content() if hasattr(child, 'text_content') else ""
+            text_preview = text_content[:80] if text_content else ""
+
+            # Get style name (may not be available from raw XML)
+            style_name = None
+            if hasattr(doc, 'paragraphs') and para_index < len(doc.paragraphs):
+                style_name = doc.paragraphs[para_index].style.name if doc.paragraphs[para_index].style else None
+
+            # Get effective font
+            effective_font = None
+            if hasattr(doc, 'paragraphs') and para_index < len(doc.paragraphs):
+                effective_font = resolve_effective_font(doc.paragraphs[para_index], theme_fonts or {})
+
+            entry: dict[str, Any] = {
+                "index": para_index,
+                "para_id": para_id,
+                "is_synthetic_id": is_synthetic,
+                "text_preview": text_preview,
+                "style_name": style_name,
+                "effective_font": effective_font,
+                "is_front_matter": is_front_matter,
+            }
+            all_paras.append(entry)
+
+            # Track front_matter transition
+            if front_matter_last_para_id and para_id == front_matter_last_para_id:
+                front_matter_active = False
+            elif front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and para_index >= int(front_matter_body_start):
+                front_matter_active = False
+
+            para_index += 1
+    else:
+        # Fallback to doc.paragraphs if body._element not accessible
+        for i, para in enumerate(doc.paragraphs):
+            para_id = get_para_id(para)
+
+            if para_id is None:
+                para_id = f"IDX_{i:05d}"
+
+            is_front_matter = front_matter_active
+            if front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and i >= int(front_matter_body_start):
+                is_front_matter = False
+
+            entry: dict[str, Any] = {
+                "index": i,
+                "para_id": para_id,
+                "is_synthetic_id": para_id.startswith("IDX_"),
+                "text_preview": (para.text[:80] if para.text else ""),
+                "style_name": para.style.name if para.style else None,
+                "effective_font": resolve_effective_font(para, theme_fonts or {}),
+                "is_front_matter": is_front_matter,
+            }
+            all_paras.append(entry)
+
+            if front_matter_last_para_id and para_id == front_matter_last_para_id:
+                front_matter_active = False
+            elif front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and i >= int(front_matter_body_start):
+                front_matter_active = False
 
     return all_paras
 
@@ -523,40 +593,52 @@ def dump_toc_entries(template_path: Path) -> list[dict]:
     return toc_entries
 
 
-def detect_front_matter_boundary(paragraph_sample: list[dict]) -> dict[str, Any]:
-    """Layer 5: Detect front matter boundary.
+def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
+    """Layer 5: Detect front matter boundary by scanning FULL document.
 
     Heuristic: front matter = content before first body paragraph.
     Body paragraphs typically have "Body Text" or "Normal" style and
     are not headings (outline_level_xml is None or paragraph has no heading style).
 
     Returns last paraId before body content zone.
+    Scans ALL paragraphs in the document, not just a sample.
     """
+    from docx.oxml.ns import qn as docx_qn
+
     # Find first paragraph that looks like body text
     # (not a heading, has substantial text, common body style)
-    body_start_index = len(paragraph_sample)
-    for i, para in enumerate(paragraph_sample):
-        style_name = (para.get("style_name") or "").lower()
-        text = para.get("text", "")
+    body_start_index = len(doc.paragraphs)
+    for i, para in enumerate(doc.paragraphs):
+        style_name = (para.style.name or "").lower()
+        text = para.text.strip()
         is_heading = any(kw in style_name for kw in ["heading", "chương", "điều", "mục", "phan"])
 
-        if not is_heading and len(text.strip()) > 20:
+        # Also check outline level XML for robustness against custom style names
+        if not is_heading:
+            style_el = para.style._element if hasattr(para.style, '_element') else None
+            if style_el is not None:
+                outline_el = style_el.find(docx_qn('w:outlineLvl'))
+                if outline_el is not None:
+                    is_heading = True
+
+        if not is_heading and len(text) > 20:
             body_start_index = i
             break
 
     # Last paraId before body
     if body_start_index > 0:
-        last_before_body = paragraph_sample[body_start_index - 1]
+        last_before_body = doc.paragraphs[body_start_index - 1]
+        last_para_id = get_para_id(last_before_body)
         return {
-            "last_para_id": last_before_body.get("para_id"),
+            "last_para_id": last_para_id,
             "body_start_index": body_start_index,
-            "description": f"last paragraph before body content zone (body starts at index {body_start_index})",
+            "description": f"body starts at para index {body_start_index} (full scan, {len(doc.paragraphs)} total)",
         }
 
     return {
         "last_para_id": None,
         "body_start_index": body_start_index,
-        "description": "no clear front matter boundary detected",
+        "description": "no boundary detected — entire doc may be front matter",
     }
 
 
@@ -575,6 +657,14 @@ def main() -> None:
         "--max-paragraphs", type=int, default=30,
         help="Number of paragraphs to sample (default: 30 per issue.md spec)"
     )
+    parser.add_argument(
+        "--skeleton-cache-dir", default=None,
+        help="Cache dir for skeleton. If provided, auto-build skeleton before inspect."
+    )
+    parser.add_argument(
+        "--force-skeleton", action="store_true",
+        help="Force skeleton rebuild even if cache exists."
+    )
     args = parser.parse_args()
 
     template_path = Path(args.template_file)
@@ -586,6 +676,20 @@ def main() -> None:
 
     # Import python-docx here (after validation)
     from docx import Document
+
+    # Skeleton pipeline: auto-build skeleton before inspect if cache dir provided
+    if args.skeleton_cache_dir:
+        from skeleton_builder import build_skeleton
+        skeleton_path = run_dir / "template_skeleton.docx"
+        skeleton_meta = build_skeleton(
+            template_path,
+            skeleton_path,
+            cache_dir=Path(args.skeleton_cache_dir),
+            force=args.force_skeleton,
+        )
+        # Use skeleton as input for inspection
+        template_path = skeleton_path
+        print(f"[docx_inspect] Using skeleton (cache_hit={skeleton_meta['cache_hit']})")
 
     doc = Document(str(template_path))
 
@@ -636,7 +740,7 @@ def main() -> None:
 
     # Layer 3b: ALL paragraph paraIds — full document (for validator)
     print("[docx_inspect] Layer 3b: all_para_ids (full document) ...")
-    front_matter = detect_front_matter_boundary(para_sample)
+    front_matter = detect_front_matter_boundary(doc)
     all_para_ids = dump_all_para_ids(doc, front_matter_boundary=front_matter, theme_fonts=theme_fonts)
     Path(run_dir, "docx_inspect_all_para_ids.json").write_text(
         json.dumps(all_para_ids, ensure_ascii=False, indent=2)

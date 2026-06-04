@@ -8,9 +8,32 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+# lxml is required for DOCX XML serialization to preserve namespace prefixes.
+# stdlib xml.etree.ElementTree corrupts namespace prefixes (w: → ns0:).
+try:
+    from lxml import etree as _etree
+    _USE_LXML = True
+except ImportError:
+    _etree = None  # type: ignore[misc,assignment]
+    _USE_LXML = False
+
 
 class OfficeCliError(RuntimeError):
     pass
+
+
+def safe_xml_tostring(root: Any, **kwargs) -> bytes:
+    """Always use lxml for XML serialization to preserve namespace prefixes.
+
+    Raises RuntimeError if lxml is not installed.
+    """
+    if not _USE_LXML:
+        raise RuntimeError(
+            "lxml is required for DOCX XML serialization. "
+            "stdlib ET corrupts namespace prefixes (w: → ns0:). "
+            "Install: pip install lxml"
+        )
+    return _etree.tostring(root, xml_declaration=True, encoding="UTF-8", **kwargs)
 
 
 def read_json(path: Path) -> dict:
