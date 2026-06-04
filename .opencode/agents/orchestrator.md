@@ -37,6 +37,9 @@ Bạn là orchestrator cho workflow DOCX.
 2. Nếu không có → lỗi executor; đọc stderr/tool output, sửa input ops hoặc anchor.
 3. Nếu có nhưng `status != completed` → không gọi readback như build đã xong.
 4. Nếu build completed nhưng readback sai → lỗi reasoning/ops, không đổ lỗi cho executor.
+5. Nếu `execute_ops_report.json` có `removed_count: 0` → **KHÔNG** tự viết inline
+   Python/bash workaround. Báo lỗi và yêu cầu user can thiệp. Đây là signal cho
+   thấy executor skip ops (thường do schema mismatch: `type` vs `op` key).
 
 ## Session Rules
 - Mặc định: `mode=preserve-template-scaffold`, `source_file=noidung.md`, `template_file=format_template.docx`, `target_file=report.docx`.

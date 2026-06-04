@@ -87,6 +87,26 @@ Sau khi viết tất cả insert ops, LUÔN thêm remove ops cho:
 Remove ops phải được viết trong CÙNG `execution_ops.json` với insert ops,
 không được tách thành 2 file riêng hay 2 lần chạy executor.
 
+#### Preserved Structural Headings Rule
+KHÔNG được remove các structural headings sau — chúng là navigation anchors:
+- **MỤC LỤC** heading (paraId thường là custom TOC header, ví dụ `7D417905`)
+- **KẾT LUẬN** heading (`Heading 1`)
+- **TÀI LIỆU THAM KHẢO** heading (`Heading 1`)
+
+Nếu `noidung.md` không có nội dung cho KẾT LUẬN hoặc TÀI LIỆU THAM KHẢO,
+VẪN phải insert heading placeholder để navigation bar hiển thị đúng:
+```json
+{
+  "op": "insert_paragraph_after",
+  "anchor": "PREVIOUS",
+  "style": "Heading1",
+  "text": "KẾT LUẬN"
+}
+```
+
+TOC entries (style `toc 1`) cũng KHÔNG remove — chúng là navigation anchors
+cho mục lục động. Chỉ remove body content placeholders, giữ nguyên structural elements.
+
 #### execution_ops Schema
 Mỗi op phải có field `role` để executor/validator phân biệt heading vs body:
 - `role: "h1" | "h2" | "h3"` cho headings

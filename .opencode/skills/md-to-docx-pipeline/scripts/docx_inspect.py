@@ -50,10 +50,20 @@ def get_para_id(para: Any) -> str | None:
     ]
 
     element = para._element
+    # Try as attribute first (for compatibility)
     for ns_qn in para_id_namespaces:
         para_id = element.get(ns_qn)
         if para_id:
             return para_id
+    # Try as child element inside w:pPr
+    ppr = element.find(qn('w:pPr'))
+    if ppr is not None:
+        for ns_qn in para_id_namespaces:
+            pid_el = ppr.find(ns_qn)
+            if pid_el is not None:
+                val = pid_el.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
+                if val:
+                    return val
     return None
 
 

@@ -409,6 +409,13 @@ def execute_ops_batch(
                 report["failed"] += 1
                 report["errors"].append({"op": "remove", "path": str(path), "error": str(exc)})
 
+        # Also process remove_paths from range_info (selected_replace_range)
+        if range_info:
+            remove_paths = range_info.get("remove_paths") or []
+            for p in remove_paths:
+                remove_batch.append({"command": "remove", "path": str(p)})
+                remove_count += 1
+
         # Flush remaining removes
         if remove_batch:
             try:
@@ -448,14 +455,14 @@ def execute_ops_batch(
                     batchable_buffer.append(op)
                     batchable_count += 1
                     if len(batchable_buffer) >= ADD_BATCH_SIZE:
-                        _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                        current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
                         batchable_buffer.clear()
                         batchable_count = 0
                     continue
 
                 # Flush buffer first
                 if batchable_buffer:
-                    _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
                     batchable_buffer.clear()
                     batchable_count = 0
 
@@ -474,7 +481,7 @@ def execute_ops_batch(
             elif op_name == "insert_paragraph_before":
                 # Flush buffer first
                 if batchable_buffer:
-                    _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
                     batchable_buffer.clear()
                     batchable_count = 0
 
@@ -492,7 +499,7 @@ def execute_ops_batch(
             elif op_name in ("insert_table_after", "insert_table"):
                 # Flush buffer
                 if batchable_buffer:
-                    _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
                     batchable_buffer.clear()
                     batchable_count = 0
 
@@ -533,7 +540,7 @@ def execute_ops_batch(
 
         # Flush remaining batchable
         if batchable_buffer:
-            _flush_batch_add(session, batchable_buffer, current_anchor, report)
+            current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
 
         # Save the document
         officecli_save(session)
@@ -546,14 +553,15 @@ def _flush_batch_add(
     buffer: list[dict],
     current_anchor: str,
     report: dict,
-) -> None:
+) -> str:
     """Batch-add simple paragraphs mechanically.
 
     OfficeCLI: parent must be '/body' for paragraph insertion.
     Use --after to specify anchor position.
+    Returns the final anchor (last inserted path) for caller tracking.
     """
     if not buffer:
-        return
+        return current_anchor
     anchor = current_anchor
     try:
         for op in buffer:
@@ -589,6 +597,7 @@ def _flush_batch_add(
     except OfficeCliError as exc:
         report["failed"] += len(buffer)
         report["errors"].append({"batch": "add", "count": len(buffer), "anchor": anchor, "error": str(exc)})
+    return anchor
 
 
 def main() -> None:
