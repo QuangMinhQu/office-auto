@@ -80,6 +80,48 @@ def collect_known_para_ids(template_inspection: dict) -> set[str]:
     return para_ids
 
 
+def collect_front_matter_para_ids(template_inspection: dict) -> set[str]:
+    """Collect para_ids that belong to front matter."""
+    front_matter: set[str] = set()
+
+    content_map = template_inspection.get("content_map", {}) or {}
+    front_matter_block = content_map.get("front_matter", {}) or {}
+    for pid in front_matter_block.get("para_ids", []) or []:
+        if pid:
+            front_matter.add(str(pid))
+
+    for entry in template_inspection.get("all_para_ids", []):
+        if entry.get("is_front_matter") and entry.get("para_id"):
+            front_matter.add(str(entry.get("para_id")))
+
+    boundary = template_inspection.get("front_matter_boundary", {}) or {}
+    last_para_id = boundary.get("last_para_id")
+    if last_para_id:
+        front_matter.add(str(last_para_id))
+
+    return front_matter
+
+
+def collect_style_effective_fonts(template_inspection: dict) -> dict[str, str]:
+    """Build a mapping of style names/ids to effective font names when available."""
+    style_fonts: dict[str, str] = {}
+    for entry in template_inspection.get("styles_raw", []):
+        effective_font = entry.get("effective_font")
+        if not effective_font:
+            continue
+        for key in (entry.get("style_id"), entry.get("name")):
+            if key:
+                style_fonts[str(key)] = str(effective_font)
+    for entry in template_inspection.get("styles_for_llm", {}).get("available_styles", []):
+        effective_font = entry.get("effective_font")
+        if not effective_font:
+            continue
+        for key in (entry.get("style_id"), entry.get("name")):
+            if key:
+                style_fonts[str(key)] = str(effective_font)
+    return style_fonts
+
+
 def collect_known_paths(template_inspection: dict) -> set[str]:
     """Collect all known paths from template inspection.
 
@@ -156,6 +198,8 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
     known_style_ids = collect_known_style_ids(template_inspection)
     known_paths = collect_known_paths(template_inspection)
     known_para_ids = collect_known_para_ids(template_inspection)
+    front_matter_para_ids = collect_front_matter_para_ids(template_inspection)
+    style_effective_fonts = collect_style_effective_fonts(template_inspection)
 
     # Check if ops_payload has ops array or is itself the ops array
     if isinstance(ops_payload, list):
@@ -207,10 +251,42 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
                     "message": f"Style '{style}' không tồn tại trong template. "
                                f"Styles có sẵn: {sorted(known_style_ids)[:10]}{'...' if len(known_style_ids) > 10 else ''}",
                     "severity": "high",
+                    "suggested_fix": {
+                        "style": next((entry.get("style_id") or entry.get("name") for entry in template_inspection.get("styles_for_llm", {}).get("available_styles", []) if entry.get("use_for") == "body paragraphs"), None),
+                    },
+                })
+
+            if style and str(style) in style_effective_fonts:
+                effective_font = style_effective_fonts[str(style)]
+                if effective_font and operation.get("run_props") and isinstance(operation.get("run_props"), dict):
+                    run_props = operation.get("run_props") or {}
+                    if run_props.get("font") or run_props.get("font_name") or run_props.get("font_family"):
+                        warnings.append({
+                            "op_index": index,
+                            "type": "font_override",
+                            "message": (
+                                f"run_props.font overrides style inheritance. Template effective_font for style '{style}' is '{effective_font}'. "
+                                "Consider removing run_props.font to inherit from style."
+                            ),
+                            "severity": "medium",
+                            "suggested_fix": {
+                                "remove_run_props": ["font", "font_name", "font_family"],
+                            },
+                        })
+
+            run_props = operation.get("run_props")
+            if isinstance(run_props, dict) and any(key in run_props and run_props.get(key) not in (None, "") for key in ("size", "size_pt", "font_size_pt")):
+                warnings.append({
+                    "op_index": index,
+                    "type": "size_override",
+                    "message": "run_props.size overrides style inheritance and may drift from the template effective font size.",
+                    "severity": "medium",
+                    "suggested_fix": {
+                        "remove_run_props": ["size", "size_pt", "font_size_pt"],
+                    },
                 })
 
             # Validate run_props structure
-            run_props = operation.get("run_props")
             if run_props and not isinstance(run_props, dict):
                 warnings.append({
                     "op_index": index,
@@ -245,6 +321,22 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
                     "message": f"Remove path `{path}` không tìm thấy trong template.",
                     "severity": "high",
                 })
+            else:
+                para_id = None
+                path_str = str(path)
+                if path_str.startswith("/body/p[@paraId="):
+                    para_id = path_str.split("@paraId=")[-1].rstrip("]")
+                if para_id and para_id in front_matter_para_ids:
+                    warnings.append({
+                        "op_index": index,
+                        "type": "front_matter_remove",
+                        "message": f"Remove op targets front-matter paragraph {para_id}. Front-matter paragraphs must not be removed.",
+                        "severity": "high",
+                        "suggested_fix": {
+                            "action": "replace_with_update_text",
+                            "keep_path": path_str,
+                        },
+                    })
 
         elif op_name == "update_text":
             path = operation.get("path")

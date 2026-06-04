@@ -33,13 +33,101 @@ from lxml import etree
 # Word XML namespace
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W14 = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 
 
 def timestamp_utc() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
-def dump_styles(doc: Any) -> list[dict]:
+def get_para_id(para: Any) -> str | None:
+    from docx.oxml.ns import qn
+
+    para_id_namespaces = [
+        qn('w:paraId'),
+        qn('w14:paraId'),
+        '{http://schemas.microsoft.com/office/word/2010/wordml}paraId',
+    ]
+
+    element = para._element
+    for ns_qn in para_id_namespaces:
+        para_id = element.get(ns_qn)
+        if para_id:
+            return para_id
+    return None
+
+
+def collect_theme_fonts(template_path: Path) -> dict[str, str | None]:
+    theme_fonts: dict[str, str | None] = {
+        "major_latin": None,
+        "minor_latin": None,
+        "major_ea": None,
+        "minor_ea": None,
+        "major_cs": None,
+        "minor_cs": None,
+    }
+    try:
+        with zipfile.ZipFile(template_path) as zf:
+            theme_name = next((name for name in zf.namelist() if name.startswith("word/theme/") and name.endswith(".xml")), None)
+            if not theme_name:
+                return theme_fonts
+            theme_doc = etree.fromstring(zf.read(theme_name))
+    except Exception:
+        return theme_fonts
+
+    major_font = theme_doc.find(f".//{{{A}}}fontScheme/{{{A}}}majorFont")
+    minor_font = theme_doc.find(f".//{{{A}}}fontScheme/{{{A}}}minorFont")
+
+    def read_font(parent: Any, tag: str) -> str | None:
+        if parent is None:
+            return None
+        child = parent.find(f"{{{A}}}{tag}")
+        if child is None:
+            return None
+        return child.get("typeface")
+
+    theme_fonts["major_latin"] = read_font(major_font, "latin")
+    theme_fonts["minor_latin"] = read_font(minor_font, "latin")
+    theme_fonts["major_ea"] = read_font(major_font, "ea")
+    theme_fonts["minor_ea"] = read_font(minor_font, "ea")
+    theme_fonts["major_cs"] = read_font(major_font, "cs")
+    theme_fonts["minor_cs"] = read_font(minor_font, "cs")
+    return theme_fonts
+
+
+def style_is_heading(style_name: str | None) -> bool:
+    if not style_name:
+        return False
+    lowered = style_name.lower()
+    return any(token in lowered for token in ["heading", "chapter", "chương", "điều", "mục", "section", "subsection", "title"])
+
+
+def resolve_effective_font(para: Any, theme_fonts: dict[str, str | None]) -> str:
+    run_candidates: list[str] = []
+    for run in getattr(para, "runs", []):
+        if getattr(run.font, "name", None):
+            run_candidates.append(str(run.font.name))
+        if getattr(run.style, "font", None) is not None and getattr(run.style.font, "name", None):
+            run_candidates.append(str(run.style.font.name))
+        if run_candidates:
+            return run_candidates[0]
+
+    style = getattr(para, "style", None)
+    visited: set[int] = set()
+    while style is not None and id(style) not in visited:
+        visited.add(id(style))
+        if getattr(style.font, "name", None):
+            return str(style.font.name)
+        style = getattr(style, "base_style", None)
+
+    style_name = getattr(getattr(para, "style", None), "name", None)
+    if style_is_heading(style_name):
+        return theme_fonts.get("major_latin") or theme_fonts.get("major_ea") or theme_fonts.get("minor_latin") or "Times New Roman"
+
+    return theme_fonts.get("minor_latin") or theme_fonts.get("minor_ea") or theme_fonts.get("major_latin") or "Times New Roman"
+
+
+def dump_styles(doc: Any, theme_fonts: dict[str, str | None]) -> list[dict]:
     """Layer 1: Style catalog — RAW, no resolve, no classify.
 
     For each style, return:
@@ -117,6 +205,8 @@ def dump_styles(doc: Any) -> list[dict]:
             entry["outline_level_xml"] = outline_elem.get(qn('w:val'))
         else:
             entry["outline_level_xml"] = None
+
+        entry["effective_font"] = resolve_effective_font(style, theme_fonts)
 
         styles_raw.append(entry)
 
@@ -234,7 +324,7 @@ def dump_paragraph_sample(doc: Any, max_count: int = 30) -> list[dict]:
     return sample_paras
 
 
-def dump_all_para_ids(doc: Any) -> list[dict]:
+def dump_all_para_ids(doc: Any, *, front_matter_boundary: dict[str, Any] | None = None, theme_fonts: dict[str, str | None] | None = None) -> list[dict]:
     """Layer 3b: ALL paragraph paraIds — full document, no sampling.
 
     Returns paraId + text preview (first 80 chars) for every paragraph.
@@ -252,27 +342,107 @@ def dump_all_para_ids(doc: Any) -> list[dict]:
     ]
 
     all_paras: list[dict] = []
+    front_matter_last_para_id = (front_matter_boundary or {}).get("last_para_id")
+    front_matter_body_start = (front_matter_boundary or {}).get("body_start_index")
+    front_matter_active = True if front_matter_last_para_id is not None else isinstance(front_matter_body_start, int)
     for i, para in enumerate(doc.paragraphs):
-        element = para._element
-
-        para_id = None
-        for ns_qn in PARA_ID_NAMESPACES:
-            para_id = element.get(ns_qn)
-            if para_id:
-                break
+        para_id = get_para_id(para)
 
         if para_id is None:
             continue
+
+        is_front_matter = front_matter_active
+        if front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and i >= int(front_matter_body_start):
+            is_front_matter = False
 
         entry: dict[str, Any] = {
             "index": i,
             "para_id": para_id,
             "text_preview": (para.text[:80] if para.text else ""),
             "style_name": para.style.name if para.style else None,
+            "effective_font": resolve_effective_font(para, theme_fonts or {}),
+            "is_front_matter": is_front_matter,
         }
+        if front_matter_last_para_id and para_id == front_matter_last_para_id:
+            front_matter_active = False
+        elif front_matter_last_para_id is None and isinstance(front_matter_body_start, int) and i >= int(front_matter_body_start):
+            front_matter_active = False
         all_paras.append(entry)
 
     return all_paras
+
+
+def summarize_styles_for_llm(styles_raw: list[dict]) -> dict[str, Any]:
+    available_styles: list[dict[str, Any]] = []
+    heading_map: dict[str, str] = {}
+    body_text_style: str | None = None
+    do_not_use_styles = ["Normal", "Default Paragraph Font"]
+
+    for style in styles_raw:
+        name = style.get("name")
+        style_id = style.get("style_id")
+        effective_font = style.get("effective_font") or style.get("run", {}).get("font_name") or style.get("run", {}).get("font")
+        if not body_text_style and str(name or "").lower() in {"normal", "normal_style", "body text", "bodytext"}:
+            body_text_style = str(style_id or name)
+
+        outline_level = style.get("outline_level_xml")
+        if outline_level == "0":
+            heading_map.setdefault("chapter_title", str(style_id or name))
+        elif outline_level == "1":
+            heading_map.setdefault("section", str(style_id or name))
+        elif outline_level == "2":
+            heading_map.setdefault("subsection", str(style_id or name))
+
+        if str(name or "") in {"Normal", "Default Paragraph Font"} and str(name or "") not in do_not_use_styles:
+            do_not_use_styles.append(str(name))
+
+        use_for = "body paragraphs"
+        if outline_level is not None:
+            use_for = f"heading level {int(outline_level) + 1}"
+        elif style_is_heading(str(name)):
+            use_for = "heading"
+
+        available_styles.append(
+            {
+                "name": name,
+                "style_id": style_id,
+                "use_for": use_for,
+                "effective_font": effective_font,
+                "font_size_pt": style.get("run", {}).get("font_size_pt"),
+                "line_spacing": style.get("line_spacing"),
+                "first_line_indent_pt": style.get("first_line_indent_pt"),
+            }
+        )
+
+    if body_text_style is None and styles_raw:
+        first_style = styles_raw[0]
+        body_text_style = str(first_style.get("style_id") or first_style.get("name"))
+
+    return {
+        "body_text_style": body_text_style,
+        "heading_map": heading_map,
+        "available_styles": available_styles,
+        "do_not_use_styles": do_not_use_styles,
+    }
+
+
+def build_content_map(all_para_ids: list[dict], front_matter_boundary: dict[str, Any]) -> dict[str, Any]:
+    front_matter_para_ids = [str(entry.get("para_id")) for entry in all_para_ids if entry.get("is_front_matter")]
+    body_placeholder_para_ids = [str(entry.get("para_id")) for entry in all_para_ids if not entry.get("is_front_matter")]
+    recommended_insert_anchor = front_matter_boundary.get("last_para_id") or (front_matter_para_ids[-1] if front_matter_para_ids else None)
+
+    return {
+        "front_matter": {
+            "para_ids": front_matter_para_ids,
+            "last_para_id": front_matter_boundary.get("last_para_id"),
+            "description": "Title page, TOC, figure list — DO NOT REMOVE",
+        },
+        "body_placeholders": {
+            "para_ids": body_placeholder_para_ids,
+            "description": "Placeholder content — SHOULD BE REMOVED before inserting new content",
+        },
+        "recommended_insert_anchor": recommended_insert_anchor,
+    }
 
 
 def dump_toc_entries(template_path: Path) -> list[dict]:
@@ -411,9 +581,11 @@ def main() -> None:
 
     print(f"[docx_inspect] Reading: {template_path}")
 
+    theme_fonts = collect_theme_fonts(template_path)
+
     # Layer 1: Styles — RAW
     print("[docx_inspect] Layer 1: styles_raw ...")
-    styles_raw = dump_styles(doc)
+    styles_raw = dump_styles(doc, theme_fonts)
     if args.top_n_styles and args.top_n_styles > 0:
         # Count style usage in paragraphs
         style_counts: dict[str, int] = {}
@@ -454,19 +626,31 @@ def main() -> None:
 
     # Layer 3b: ALL paragraph paraIds — full document (for validator)
     print("[docx_inspect] Layer 3b: all_para_ids (full document) ...")
-    all_para_ids = dump_all_para_ids(doc)
+    front_matter = detect_front_matter_boundary(para_sample)
+    all_para_ids = dump_all_para_ids(doc, front_matter_boundary=front_matter, theme_fonts=theme_fonts)
     Path(run_dir, "docx_inspect_all_para_ids.json").write_text(
         json.dumps(all_para_ids, ensure_ascii=False, indent=2)
     )
     print(f"[docx_inspect]   → {len(all_para_ids)} total paragraphs written")
 
+    styles_for_llm = summarize_styles_for_llm(styles_raw)
+    Path(run_dir, "docx_inspect_styles_for_llm.json").write_text(
+        json.dumps(styles_for_llm, ensure_ascii=False, indent=2)
+    )
+    print("[docx_inspect]   → styles_for_llm written")
+
     # Layer 5: Front matter boundary
     print("[docx_inspect] Layer 5: front_matter_boundary ...")
-    front_matter = detect_front_matter_boundary(para_sample)
     Path(run_dir, "docx_inspect_front_matter_boundary.json").write_text(
         json.dumps(front_matter, ensure_ascii=False, indent=2)
     )
     print(f"[docx_inspect]   → front_matter_boundary: {front_matter.get('description')}")
+
+    content_map = build_content_map(all_para_ids, front_matter)
+    Path(run_dir, "docx_inspect_content_map.json").write_text(
+        json.dumps(content_map, ensure_ascii=False, indent=2)
+    )
+    print("[docx_inspect]   → content_map written")
 
     # Build combined output matching issue.md schema exactly
     combined = {
@@ -486,6 +670,8 @@ def main() -> None:
         "all_para_ids": all_para_ids,
         "toc_entries_raw": toc_entries,
         "front_matter_boundary": front_matter,
+        "styles_for_llm": styles_for_llm,
+        "content_map": content_map,
     }
     Path(run_dir, "docx_inspect_output.json").write_text(
         json.dumps(combined, ensure_ascii=False, indent=2)
@@ -499,10 +685,12 @@ def main() -> None:
         "max_paragraphs": args.max_paragraphs,
         "layer_files": {
             "styles_raw": str(run_dir / "docx_inspect_styles_raw.json"),
+            "styles_for_llm": str(run_dir / "docx_inspect_styles_for_llm.json"),
             "page_layout_raw": str(run_dir / "docx_inspect_page_layout_raw.json"),
             "paragraph_sample": str(run_dir / "docx_inspect_paragraph_sample.json"),
             "toc_entries_raw": str(run_dir / "docx_inspect_toc_entries_raw.json"),
             "front_matter_boundary": str(run_dir / "docx_inspect_front_matter_boundary.json"),
+            "content_map": str(run_dir / "docx_inspect_content_map.json"),
         },
         "combined_output": str(run_dir / "docx_inspect_output.json"),
     }

@@ -23,13 +23,22 @@ Scripts là tay, LLM là não.
 | `docx_inspect_paragraph_sample.json` | 30 paragraphs đầu (quick reference) |
 | `docx_inspect_all_para_ids.json` | TẤT CẢ paraIds (full document, dùng cho anchor) |
 | `docx_inspect_styles_raw.json` | Paragraph styles + outline_level_xml |
+| `docx_inspect_styles_for_llm.json` | Compact style summary for LLM reasoning |
 | `docx_inspect_page_layout_raw.json` | Paper size, margins (twips) |
 | `docx_inspect_toc_entries_raw.json` | TOC fields + bookmark anchors |
 | `docx_inspect_front_matter_boundary.json` | Last paraId trước body content |
+| `docx_inspect_content_map.json` | Front-matter/body anchor map |
 | `execution_ops.json` | LLM-generated ops |
 | `execution_ops_validation.json` | Validator warnings |
 | `execute_ops_report.json` | Execution summary |
+| `qa_report.json` | QA metrics after build |
+| `review_report.json` / `review_report.md` / `review_screen.html` | Semantic review artifacts |
 | `result_readback.json` | Output DOCX readback |
+
+## Helper Tools
+
+- `prepareInsertPlan` — aggregate inspection + markdown headings into a compact scaffold
+- `reviewOutput` — run review_docx.py and expose review artifacts
 
 ## LLM Reasoning Chain
 
@@ -55,6 +64,8 @@ Anchor convention:
 - Các op tiếp theo: `"PREVIOUS"` — executor tự động track last inserted path
 
 Mỗi op phải có đầy đủ `run_props` và `para_props` explicit — không inherit.
+
+Khi có `docx_inspect_content_map.json`, ưu tiên dùng `recommended_insert_anchor` và tránh remove front-matter paragraphs.
 
 ```json
 [
