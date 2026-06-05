@@ -73,7 +73,10 @@ def ensure_para_ids(doc: Document) -> int:
 
 
 def detect_body_start(doc: Document) -> int:
-    """Scan full doc.paragraphs, return index where body content starts.
+    """Scan body._element directly (p and tbl mixed), return element count where body starts.
+
+    CRITICAL: Must count the same way as the removal loop to ensure index alignment.
+    Iterate body._element and count both paragraphs AND tables.
 
     Heuristic: first non-heading paragraph with text > 20 chars.
     Also checks outline_level_xml for robustness against custom style names.
@@ -82,24 +85,46 @@ def detect_body_start(doc: Document) -> int:
     """
     from docx.oxml.ns import qn as docx_qn
 
-    for i, para in enumerate(doc.paragraphs):
-        style_name = (para.style.name or "").lower()
-        is_heading = any(kw in style_name for kw in HEADING_KEYWORDS)
+    body = doc.element.body
+    element_count = 0  # Count both p and tbl elements, matching removal loop
+    para_index = 0    # Track which doc.paragraphs index we're at
 
-        # Also check outline level XML for robustness
-        if not is_heading:
-            style_el = para.style._element if hasattr(para.style, '_element') else None
-            if style_el is not None:
-                outline_el = style_el.find(docx_qn('w:outlineLvl'))
-                if outline_el is not None:
-                    is_heading = True
+    for child in body:
+        tag = etree.QName(child.tag).localname
+        if tag == "sectPr":
+            break  # Stop at section properties
 
-        if not is_heading:
-            text = para.text.strip()
-            if len(text) > 20:
-                return i
+        # Only count p and tbl elements (skip others like bookmarks, comments, etc.)
+        if tag not in ("p", "tbl"):
+            continue
 
-    return len(doc.paragraphs)  # entire doc is front matter
+        # For paragraphs, check if this is where body starts
+        if tag == "p":
+            # Match this element to a doc.paragraphs entry
+            if para_index < len(doc.paragraphs):
+                para = doc.paragraphs[para_index]
+                style_name = (para.style.name or "").lower()
+                is_heading = any(kw in style_name for kw in HEADING_KEYWORDS)
+
+                # Also check outline level XML for robustness
+                if not is_heading:
+                    style_el = para.style._element if hasattr(para.style, '_element') else None
+                    if style_el is not None:
+                        outline_el = style_el.find(docx_qn('w:outlineLvl'))
+                        if outline_el is not None:
+                            is_heading = True
+
+                # Found first body paragraph — return current element count
+                if not is_heading:
+                    text = para.text.strip()
+                    if len(text) > 20:
+                        return element_count
+
+            para_index += 1
+
+        element_count += 1
+
+    return element_count  # entire doc is front matter
 
 
 def build_skeleton(
@@ -143,8 +168,8 @@ def build_skeleton(
     body_start_idx = detect_body_start(doc)
 
     # Step 2: remove body content from body._element
-    # Iterate body._element children (paragraphs AND tables), not doc.paragraphs
-    para_count = 0
+    # Count must match detect_body_start() — count both p and tbl elements
+    element_count = 0
     elements_to_remove = []
 
     for child in list(body):
@@ -152,11 +177,11 @@ def build_skeleton(
         if tag == "sectPr":
             break  # preserve section properties
 
+        # Only count and potentially remove p and tbl elements
         if tag in ("p", "tbl"):
-            if para_count >= body_start_idx:
+            if element_count >= body_start_idx:
                 elements_to_remove.append(child)
-            if tag == "p":
-                para_count += 1
+            element_count += 1  # Increment for EVERY p/tbl, not just p
 
     removed_count = len(elements_to_remove)
     for el in elements_to_remove:
