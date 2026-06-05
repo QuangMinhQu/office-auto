@@ -248,5 +248,78 @@ class SafeXmlToStringTests(unittest.TestCase):
             self.assertIn("lxml is required", str(ctx.exception))
 
 
+class ExecuteExecutionOpsFailFastTests(unittest.TestCase):
+    """Test --fail-fast mode stops immediately on first error instead of accumulating errors."""
+
+    def test_fail_fast_false_accumulates_errors(self) -> None:
+        """When fail_fast=False, errors are accumulated and execution continues."""
+        import execute_execution_ops
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            target_path = tmpdir_path / "test.docx"
+
+            # Create a simple DOCX
+            from docx import Document
+            doc = Document()
+            doc.add_paragraph("Test content")
+            doc.save(str(target_path))
+
+            # Mock officecli operations to fail on specific ops
+            ops = [
+                {"op": "insert_paragraph_after", "anchor": "/body/p[1]", "style": "Normal", "text": "First"},
+                {"op": "insert_paragraph_after", "anchor": "/body/p[2]", "style": "Normal", "text": "Second"},
+                {"op": "insert_paragraph_after", "anchor": "/body/p[3]", "style": "Normal", "text": "Third"},
+            ]
+
+            with patch("execute_execution_ops.officecli_open"):
+                with patch("execute_execution_ops.officecli_close"):
+                    with patch("execute_execution_ops.officecli_save"):
+                        with patch("execute_execution_ops.execute_insert_paragraph", side_effect=officecli_native.OfficeCliError("Mock error")):
+                            report = execute_execution_ops.execute_ops_batch(
+                                ops,
+                                target_path,
+                                fail_fast=False
+                            )
+
+            # With fail_fast=False, all 3 ops fail but execution completes
+            self.assertEqual(report["failed"], 3)
+            self.assertEqual(report["total_ops"], 3)
+            self.assertEqual(len(report["errors"]), 3)
+
+    def test_fail_fast_true_stops_on_first_error(self) -> None:
+        """When fail_fast=True, execution stops immediately on first error."""
+        import execute_execution_ops
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            target_path = tmpdir_path / "test.docx"
+
+            # Create a simple DOCX
+            from docx import Document
+            doc = Document()
+            doc.add_paragraph("Test content")
+            doc.save(str(target_path))
+
+            # Mock officecli operations to fail on first op
+            ops = [
+                {"op": "insert_paragraph_after", "anchor": "/body/p[1]", "style": "Normal", "text": "First"},
+                {"op": "insert_paragraph_after", "anchor": "/body/p[2]", "style": "Normal", "text": "Second"},
+                {"op": "insert_paragraph_after", "anchor": "/body/p[3]", "style": "Normal", "text": "Third"},
+            ]
+
+            with patch("execute_execution_ops.officecli_open"):
+                with patch("execute_execution_ops.officecli_close"):
+                    with patch("execute_execution_ops.officecli_save"):
+                        with patch("execute_execution_ops.execute_insert_paragraph", side_effect=officecli_native.OfficeCliError("Mock error")):
+                            # With fail_fast=True, should raise on first error
+                            with self.assertRaises(officecli_native.OfficeCliError):
+                                execute_execution_ops.execute_ops_batch(
+                                    ops,
+                                    target_path,
+                                    fail_fast=True
+                                )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,14 @@ LLM receives the raw dump and does ALL reasoning:
   - template type classification
   - markdown → style mapping
 
+LLM ANCHOR GENERATION RULES:
+  1. ALWAYS use paraId-based anchors when available: "/body/p[@paraId=XXXXXXXX]"
+     Example: "/body/p[@paraId=1A2B3C4D]"
+     WHY: paraId is stable and survives anchor drift when paragraphs are removed
+  2. NEVER use positional IDX_ anchors like "IDX_42" — they cause cascade failures
+  3. For insertions: Look up the target paragraph in all_para_ids and reference its paraId
+  4. For removals: Use the exact paraId path of the paragraph to remove
+
 Usage:
     python docx_inspect.py --template-file <path> --run-dir <path>
 """

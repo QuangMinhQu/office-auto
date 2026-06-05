@@ -5,6 +5,16 @@ Reads execution_ops.json and applies each operation mechanically to the
 target DOCX via OfficeCLI. This is the "hands" — the LLM already decided
 WHAT to do. This script ONLY executes.
 
+ANCHOR RESOLUTION (in priority order):
+  1. "/body/p[@paraId=XXXXXXXX]" — PREFERRED: stable paraId (survives removes)
+  2. "PREVIOUS" — relative reference to last processed paragraph
+  3. IDX_XXXXX — DEPRECATED: positional index (causes anchor drift)
+  
+OfficeCLI supports all three formats, but paraId-based anchors are RECOMMENDED
+because paraId values are stable and don't change when other paragraphs are removed.
+Using positional IDX_ anchors causes cascade failures: when an earlier remove operation
+shifts indices, all subsequent operations using IDX_ anchors point to wrong locations.
+
 Supported operations (per issue.md spec):
   - insert_paragraph_after:  insert paragraph after anchor with style/text
   - insert_paragraph_before: insert paragraph before anchor with style/text
@@ -14,7 +24,7 @@ Supported operations (per issue.md spec):
   - set_page_layout: set page-level properties (margins, paper_size, orientation)
 
 Usage:
-    python execute_execution_ops.py --run-dir <path>
+    python execute_execution_ops.py --run-dir <path> [--fail-fast]
 """
 from __future__ import annotations
 
@@ -378,10 +388,17 @@ def resolve_anchor(op: dict, current_anchor: str, range_info: dict | None) -> st
     """Resolve anchor for an operation.
 
     Mechanics only: no intelligence, just path resolution.
-    Special keywords:
-      - "PREVIOUS" / "previous" → use current_anchor (last inserted/processed path)
-      - "selected" → use range_info.insert_after_path if available
-      - "IDX_XXXXX" → resolve to real paraId via body._element iteration
+    
+    PREFERRED anchor formats (in order of stability):
+      1. "/body/p[@paraId=XXXXXXXX]" — BEST: stable paraId, survives anchor drift
+         Example: "/body/p[@paraId=1A2B3C4D]"
+      2. "PREVIOUS" — last inserted/processed path (relative reference)
+      3. "selected_replace_range" — range-based anchor
+      4. IDX_XXXXX — DEPRECATED: positional index, drifts after removes
+         Example: "IDX_00042"
+    
+    LLM INSTRUCTION: Always prefer paraId-based anchors when available.
+    Avoid IDX_ format as it causes cascade failures when earlier ops remove paragraphs.
     """
     explicit_anchor = op.get("anchor")
     anchor_str = str(explicit_anchor).strip() if explicit_anchor else ""
@@ -390,9 +407,18 @@ def resolve_anchor(op: dict, current_anchor: str, range_info: dict | None) -> st
     if anchor_str and anchor_str.upper() == "PREVIOUS":
         return current_anchor
 
-    # Handle IDX_ synthetic anchors — resolve to real paraId
+    # Handle paraId-based anchors — PREFERRED FORMAT (stable, survives drift)
+    if anchor_str.startswith("/body/p[@paraId="):
+        # Format: /body/p[@paraId=XXXXXXXX]
+        # This is the RECOMMENDED anchor format. paraId is stable and doesn't change
+        # when other paragraphs are removed, avoiding cascade failures.
+        return anchor_str
+
+    # Handle IDX_ synthetic anchors — DEPRECATED (positional, causes drift)
     if anchor_str.startswith("IDX_"):
-        # This is handled by the caller with access to doc object
+        # Positional anchor - index can shift after removes
+        # This is provided as fallback for legacy templates without real paraIds,
+        # but causes anchor drift. Prefer paraId-based anchors instead.
         return anchor_str
 
     # Handle other explicit anchors
@@ -413,9 +439,11 @@ def execute_ops_batch(
     ops: list[dict],
     target_path: Path,
     range_info: dict | None = None,
+    fail_fast: bool = False,
 ) -> dict:
     """Execute a batch of operations mechanically.
 
+    If fail_fast is True, stop immediately on first OfficeCliError and save partial work.
     Returns summary stats.
     """
     report = {
@@ -452,6 +480,9 @@ def execute_ops_batch(
             except OfficeCliError as exc:
                 report["failed"] += 1
                 report["errors"].append({"op": "remove", "path": str(path), "error": str(exc)})
+                if fail_fast:
+                    officecli_save(session)
+                    raise
 
         # Also process remove_paths from range_info (selected_replace_range)
         if range_info:
@@ -467,6 +498,9 @@ def execute_ops_batch(
             except OfficeCliError as exc:
                 report["failed"] += 1
                 report["errors"].append({"batch": "remove", "error": str(exc)})
+                if fail_fast:
+                    officecli_save(session)
+                    raise
 
         report["removed_count"] = remove_count
 
@@ -521,6 +555,9 @@ def execute_ops_batch(
                 except OfficeCliError as exc:
                     report["failed"] += 1
                     report["errors"].append({"op": "insert_paragraph", "path": str(anchor), "error": str(exc)})
+                    if fail_fast:
+                        officecli_save(session)
+                        raise
 
             elif op_name == "insert_paragraph_before":
                 # Flush buffer first
@@ -539,6 +576,9 @@ def execute_ops_batch(
                 except OfficeCliError as exc:
                     report["failed"] += 1
                     report["errors"].append({"op": "insert_paragraph_before", "path": str(anchor), "error": str(exc)})
+                    if fail_fast:
+                        officecli_save(session)
+                        raise
 
             elif op_name in ("insert_table_after", "insert_table"):
                 # Flush buffer
@@ -557,6 +597,9 @@ def execute_ops_batch(
                 except OfficeCliError as exc:
                     report["failed"] += 1
                     report["errors"].append({"op": "insert_table", "path": str(anchor), "error": str(exc)})
+                    if fail_fast:
+                        officecli_save(session)
+                        raise
 
         # Third pass: execute update_text ops
         update_ops = [op for op in ops if op.get("op") == "update_text"]
@@ -641,6 +684,9 @@ def _flush_batch_add(
     except OfficeCliError as exc:
         report["failed"] += len(buffer)
         report["errors"].append({"batch": "add", "count": len(buffer), "anchor": anchor, "error": str(exc)})
+        if fail_fast:
+            officecli_save(target_path)
+            raise
     return anchor
 
 
@@ -656,6 +702,12 @@ def main() -> None:
     parser.add_argument(
         "--target-file", default=None,
         help="Target output file. If omitted, uses ops target or template path."
+    )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        default=False,
+        help="Stop immediately on first error instead of accumulating errors. Saves partial work before stopping."
     )
     args = parser.parse_args()
 
@@ -717,6 +769,7 @@ def main() -> None:
         ops_list,
         target_path,
         range_info=range_info,
+        fail_fast=args.fail_fast,
     )
 
     duration = round(time.perf_counter() - start, 2)

@@ -223,41 +223,63 @@ def main() -> None:
                     warning_count = val_data.get("warning_count", 0)
                     high_count = val_data.get("high_severity_count", 0)
                     print(f"[build_report]   Warnings: {warning_count} (high: {high_count})")
-                    if warning_count > 0:
-                        print("[build_report] ⚠️  LLM nên review warnings trước khi execute")
+                    
+                    # BLOCKING: High-severity warnings must be fixed before execute
+                    if high_count > 0:
+                        print("\n" + "=" * 70)
+                        print("[build_report] ❌ Validation found HIGH-SEVERITY warnings — BLOCKING execute")
+                        print(f"[build_report] {high_count} high-severity issue(s) in execution_ops.json:")
+                        warnings_list = val_data.get("warnings", [])
+                        high_warnings = [w for w in warnings_list if w.get("severity") == "high"]
+                        for idx, warn in enumerate(high_warnings[:10], 1):  # Show first 10
+                            print(f"[build_report]   {idx}. Op #{warn.get('op_index', '?')}: {warn.get('message', 'Unknown')}")
+                        if len(high_warnings) > 10:
+                            print(f"[build_report]   ... and {len(high_warnings) - 10} more")
+                        print("[build_report]")
+                        print("[build_report] TIẾP THEO: LLM fix execution_ops.json and run again:")
+                        print(f"[build_report]   python build_report.py --phase execute --run-dir {run_dir}")
+                        print("=" * 70)
+                        failed_step = "docx_validate_ops.py"
+                        exit_code = 1
+                    elif warning_count > 0:
+                        print("[build_report] ⚠️  LLM nên review medium/low warnings trước khi execute")
             else:
-                # Validation is warn-only — don't fail pipeline, just warn
-                print(f"\n[build_report] ⚠️  docx_validate_ops.py có lỗi (warn-only, tiếp tục execute)")
+                # Validation script itself failed
+                print(f"\n[build_report] ⚠️  docx_validate_ops.py execution có lỗi (continue to execute)")
 
     # === PHASE: EXECUTE ===
     # Apply execution_ops.json mechanically (LLM already decided what to do)
     if args.phase in ("execute", "all"):
-        # Check if execution_ops.json exists (LLM must have written it)
-        ops_file = run_dir / "execution_ops.json"
-        if not ops_file.exists():
-            print(f"\n[build_report] ❌ execution_ops.json không tồn tại tại {run_dir}")
-            print("[build_report] Chạy 'python build_report.py --phase inspect' trước,")
-            print("[build_report] rồi để LLM viết execution_ops.json.")
-            failed_step = "execute_execution_ops.py"
-            exit_code = 1
+        # Check if validation failed (high-severity warnings blocking)
+        if failed_step:
+            print(f"\n[build_report] ⏭️  Skipping execute: validation failed, fix execution_ops.json first")
         else:
-            # Copy template to target if needed
-            tpl = Path(args.template_file)
-            tgt = Path(args.target_file)
-            if tpl.exists() and str(tpl) != str(tgt):
-                tgt.parent.mkdir(parents=True, exist_ok=True)
-                import shutil
-                shutil.copy2(str(tpl), str(tgt))
-                print(f"\n[build_report] Copied {tpl} → {tgt}")
-
-            success = run_and_record(
-                "execute_execution_ops.py",
-                ["--run-dir", str(run_dir), "--template-file", args.template_file, "--target-file", args.target_file]
-            )
-            if not success:
+            # Check if execution_ops.json exists (LLM must have written it)
+            ops_file = run_dir / "execution_ops.json"
+            if not ops_file.exists():
+                print(f"\n[build_report] ❌ execution_ops.json không tồn tại tại {run_dir}")
+                print("[build_report] Chạy 'python build_report.py --phase inspect' trước,")
+                print("[build_report] rồi để LLM viết execution_ops.json.")
                 failed_step = "execute_execution_ops.py"
+                exit_code = 1
             else:
-                print("\n[build_report] ✅ execute_execution_ops.py hoàn tất.")
+                # Copy template to target if needed
+                tpl = Path(args.template_file)
+                tgt = Path(args.target_file)
+                if tpl.exists() and str(tpl) != str(tgt):
+                    tgt.parent.mkdir(parents=True, exist_ok=True)
+                    import shutil
+                    shutil.copy2(str(tpl), str(tgt))
+                    print(f"\n[build_report] Copied {tpl} → {tgt}")
+
+                success = run_and_record(
+                    "execute_execution_ops.py",
+                    ["--run-dir", str(run_dir), "--template-file", args.template_file, "--target-file", args.target_file, "--fail-fast"]
+                )
+                if not success:
+                    failed_step = "execute_execution_ops.py"
+                else:
+                    print("\n[build_report] ✅ execute_execution_ops.py hoàn tất.")
 
     # === PHASE: READ RESULT ===
     # Read back the result DOCX to verify execution

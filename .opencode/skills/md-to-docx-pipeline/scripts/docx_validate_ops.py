@@ -5,7 +5,16 @@ Validates LLM-generated execution_ops.json against raw template inspection.
 This is a PRIMITIVE TOOL — it does NOT make decisions, it only reports warnings.
 
 The LLM reads the warnings and decides whether to fix execution_ops.json
-before passing it to docx_apply_ops (execute_execution_ops.py).
+before passing it to execute_execution_ops.py.
+
+VALIDATION RULES FOR ANCHORS:
+  - PREFERRED: "/body/p[@paraId=XXXXXXXX]" — stable paraId format
+  - OK: IDX_XXXXX for legacy templates without paraIds (warning issued)
+  - OK: "PREVIOUS" / sequential anchors
+  - HIGH WARNING: unknown paraId or IDX that doesn't exist
+  
+Anchor validation ensures operations reference valid locations in the template,
+preventing silent failures during execution.
 
 No dependencies on compile_execution_ops.py or any heuristic scripts.
 Fully independent per issue.md architecture.
