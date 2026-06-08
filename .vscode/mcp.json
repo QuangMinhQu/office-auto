@@ -7,6 +7,18 @@
         "mcp"
       ]
     },
+    "office-auto": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "--import",
+        "tsx",
+        "${workspaceFolder}/mcp/office-auto-server.ts"
+      ],
+      "env": {
+        "OFFICE_AUTO_WORKSPACE": "${workspaceFolder}"
+      }
+    },
     "codegraph": {
       "type": "stdio",
       "command": "npx",

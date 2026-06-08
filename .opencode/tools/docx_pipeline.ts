@@ -1,121 +1,13 @@
 import { tool } from "@opencode-ai/plugin"
-
-const BunRuntime = (globalThis as any).Bun as {
-  spawn: (
-    command: string[],
-    opts: { cwd: string; stdout: "pipe"; stderr: "pipe" },
-  ) => { stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array>; exited: Promise<number> }
-}
-
-type ScriptStep = [string, string[]]
-
-type ScriptResult = {
-  ok: boolean
-  script: string
-  command: string
-  stdout: string
-  stderr: string
-  exitCode: number
-}
-
-function resolveWorkspacePath(worktree: string, inputPath: string): string {
-  if (!inputPath) {
-    return worktree
-  }
-  if (inputPath.startsWith("/")) {
-    return inputPath
-  }
-
-  const segments = worktree.replace(/\/+$/, "").split("/")
-  for (const part of inputPath.split("/")) {
-    if (!part || part === ".") {
-      continue
-    }
-    if (part === "..") {
-      if (segments.length > 1) {
-        segments.pop()
-      }
-      continue
-    }
-    segments.push(part)
-  }
-  return segments.join("/") || "/"
-}
-
-function makeAutoRunDir(worktree: string, suffix = "auto"): string {
-  const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 15)
-  return `${worktree.replace(/\/+$/, "")}/.office-auto/state/${ts}_${suffix}`
-}
-
-function resolveInspectionRunDir(worktree: string, inputPath: string): string {
-  if (!inputPath || inputPath.includes("$(")) {
-    return makeAutoRunDir(worktree, "inspect")
-  }
-  return resolveWorkspacePath(worktree, inputPath)
-}
-
-function resolveRunDirArtifact(runDir: string, inputPath: string, fallbackFile: string): string {
-  if (inputPath) {
-    return inputPath
-  }
-  return `${runDir.replace(/\/+$/, "")}/${fallbackFile}`
-}
-
-function parseMarkdownHeadings(markdownText: string): Array<{ level: number; text: string }> {
-  return markdownText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith("#"))
-    .map((line) => {
-      const match = line.match(/^(#+)\s+(.*)$/)
-      if (!match) {
-        return null
-      }
-      return { level: match[1].length, text: match[2].trim() }
-    })
-    .filter((value): value is { level: number; text: string } => Boolean(value))
-}
-
-async function runScript(script: string, args: string[], worktree: string): Promise<ScriptResult> {
-  const scriptPath = `${worktree}/.opencode/skills/md-to-docx-pipeline/scripts/${script}`
-  const py = "python3"
-  const command = [py, scriptPath, ...args]
-  const proc = BunRuntime.spawn(command, { cwd: worktree, stdout: "pipe", stderr: "pipe" })
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ])
-  return {
-    ok: exitCode === 0,
-    script,
-    command: command.join(" "),
-    stdout: stdout.trim(),
-    stderr: stderr.trim(),
-    exitCode,
-  }
-}
-
-async function runSteps(steps: ScriptStep[], worktree: string): Promise<{ status: string; failed_step?: string; results: ScriptResult[] }> {
-  const results: ScriptResult[] = []
-  for (const [script, scriptArgs] of steps) {
-    const result = await runScript(script, scriptArgs, worktree)
-    results.push(result)
-    if (!result.ok) {
-      return { status: "failed", failed_step: script, results }
-    }
-  }
-  return { status: "completed", results }
-}
-
-async function readJsonFile(path: string): Promise<any | undefined> {
-  try {
-    const text = await new Response((globalThis as any).Bun.file(path)).text()
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
+import {
+  parseMarkdownHeadings,
+  readJsonFile,
+  resolveInspectionRunDir,
+  resolveRunDirArtifact,
+  resolveWorkspacePath,
+  runSteps,
+  type ScriptStep,
+} from "../../mcp/pipeline-core"
 
 export const inspectTemplate = tool({
   // @ts-expect-error title is spec 2025-11-25, not yet in opencode plugin types

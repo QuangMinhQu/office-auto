@@ -1,6 +1,6 @@
 # office-auto
 
-Repo này chốt một workflow chuẩn duy nhất cho Markdown -> DOCX bằng OpenCode + OfficeCLI. Mục tiêu không phải tái tạo tài liệu từ đầu, mà là giữ scaffold của template Word và chỉ thay vùng nội dung chính theo contract `preserve-template-scaffold`.
+Repo này chốt một workflow chuẩn duy nhất cho Markdown -> DOCX bằng OpenCode + OfficeCLI, đồng thời expose lại cùng pipeline qua MCP server `office-auto`. Mục tiêu không phải tái tạo tài liệu từ đầu, mà là giữ scaffold của template Word và chỉ thay vùng nội dung chính theo contract `preserve-template-scaffold`.
 
 ## Workflow chuẩn hiện tại
 
@@ -122,6 +122,8 @@ Workspace đã được cấu hình để OpenCode/Copilot Agent đi đúng work
 - `.opencode/AGENTS.md`: routing + hard gate.
 - `task.md`: contract chuẩn cho prompt tối giản.
 - `.opencode/tools/docx_pipeline.ts`: custom tools chuẩn của workspace.
+- `mcp/office-auto-server.ts`: MCP server local bọc cùng workflow DOCX.
+- `.vscode/mcp.json`: đăng ký `office-auto` cùng `officecli`.
 - `.vscode/tasks.json`: task build DOCX, latest review summary, unit tests.
 - `.vscode/settings.json`: bật MCP auto-start và unittest config.
 

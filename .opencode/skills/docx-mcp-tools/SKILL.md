@@ -8,6 +8,7 @@ license: MIT
 
 ## Muc tieu
 Cung cap bo primitive callable de agent reasoning DOCX ma khong can compose shell command dai trong prompt.
+Bo tool nay hien duoc expose qua MCP server `office-auto` va van co plugin OpenCode song song.
 
 ## Cac tool chinh
 - `inspectTemplate`
@@ -20,6 +21,7 @@ Cung cap bo primitive callable de agent reasoning DOCX ma khong can compose shel
 
 ## Contract
 - Tool duoc dinh nghia tai `.opencode/tools/docx_pipeline.ts`.
+- MCP server tuong ung nam o `mcp/office-auto-server.ts`.
 - Script runtime la Python, execute qua Bun spawn.
 - Tra ve JSON text gom `status`, `failed_step` (neu co), artifact path va payload doc duoc khi phu hop.
 - Khong goi truc tiep OfficeCLI MCP tools.

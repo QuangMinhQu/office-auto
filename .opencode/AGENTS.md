@@ -23,6 +23,15 @@ Do not glob `.opencode/tools` to discover these. They are pre-loaded OpenCode pl
 - `prepareInsertPlan` - build reasoning scaffold
 - `reviewOutput` - semantic review
 - `readResult` - verify output
-- `runPipeline` - composite: inspect → validate → apply → read
+- `runPipeline` - composite: inspect -> validate -> apply -> read
 
 Default inputs: template=`format_template.docx`, content=`noidung.md`, output=`report.docx`.
+
+## Agent Topology
+
+- **orchestrator** (primary): nhận request từ user, delegate-only, KHÔNG tự execute
+- **builder** (subagent, hidden): inspect -> plan -> write ops -> validate -> apply
+- **reviewer** (subagent, hidden): readResult -> reviewOutput -> structured verdict
+
+Subagents chỉ được spawn bởi orchestrator qua Task tool.
+Subagents trả output kết thúc bằng một JSON block - orchestrator parse block đó.

@@ -5,6 +5,21 @@
     ".opencode/AGENTS.md",
     ".opencode/memory/project.md"
   ],
+  "mcp": {
+    "office-auto": {
+      "type": "local",
+      "command": [
+        "node",
+        "--import",
+        "tsx",
+        "mcp/office-auto-server.ts"
+      ],
+      "enabled": true,
+      "environment": {
+        "OFFICE_AUTO_WORKSPACE": "{cwd}"
+      }
+    }
+  },
   "permission": {
     "mcp_officecli_*": "deny"
   }

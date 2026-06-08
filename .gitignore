@@ -26,3 +26,6 @@ manual-run-state-summary.md
 convert.md
 report_convert.md
 logs.txt
+
+# Node dependencies
+node_modules/

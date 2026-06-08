@@ -9,6 +9,8 @@ license: MIT
 ## Trình tự chạy
 Scripts là tay, LLM là não.
 
+Các primitive này duoc expose qua ca `.opencode/tools/docx_pipeline.ts` lan `mcp/office-auto-server.ts` (server `office-auto`).
+
 1. `docx_inspect.py` — raw dump, zero heuristics
 1b. `prepareInsertPlan` — build reasoning scaffold (BẮT BUỘC)
 2. **[LLM REASONING]** — đọc scaffold + markdown, viết `execution_ops.json`
