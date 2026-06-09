@@ -215,7 +215,7 @@ def execute_insert_paragraph_before(operation: dict, current_anchor: str, docume
     """
     style = str(operation.get("style") or "Normal")
     text = str(operation.get("text") or "")
-    anchor = str(operation.get("anchor") or current_anchor or "")
+    anchor = current_anchor
     run_props = operation.get("run_props") or {}
 
     # Build set_props: style, text, plus any run-level properties

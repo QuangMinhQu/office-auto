@@ -2,7 +2,9 @@
 description: Builder - viết execution_ops.json và apply vào DOCX template
 mode: subagent
 model: sglang/Qwen3.6-35B-A3B-GGUF
-temperature: 0.1
+temperature: 0.6
+top_p: 0.95
+top_k: 20
 steps: 80
 hidden: true
 permission:
