@@ -14,7 +14,6 @@ Bo tool nay hien duoc expose qua MCP server `office-auto` va van co plugin OpenC
 - `inspectTemplate`
 - `validateExecutionOps`
 - `applyExecutionOps`
-- `prepareInsertPlan`
 - `reviewOutput`
 - `readResult`
 - `runPipeline`

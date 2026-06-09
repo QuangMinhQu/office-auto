@@ -1,6 +1,5 @@
 import { tool } from "@opencode-ai/plugin"
 import {
-  parseMarkdownHeadings,
   readJsonFile,
   resolveInspectionRunDir,
   resolveRunDirArtifact,
@@ -89,12 +88,11 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
         style_id: s.style_id,
         use_for: s.use_for
       })),
-      placeholders: (payload.all_para_ids || [])
-        .filter((p: any) => !p.is_front_matter)
-        .map((p: any) => ({
-          paraId: p.para_id,
-          text_preview: p.text_preview
-        }))
+      placeholders: (payload.all_para_ids || []).map((p: any) => ({
+        paraId: p.para_id,
+        text_preview: p.text_preview,
+        is_front_matter: !!p.is_front_matter,
+      }))
     } : null;
 
     return JSON.stringify(
@@ -237,7 +235,7 @@ ANNOTATIONS: writes output DOCX, non-idempotent.`,
     source_file: tool.schema.string().default("").describe("Optional source markdown path."),
     mode: tool.schema
       .enum(["full", "incremental", "ops_only"])
-      .default("full")
+      .default("ops_only")
       .describe("'full' re-inspects; 'incremental' skips if output exists; 'ops_only' executes only."),
   },
   async execute(args, context) {
@@ -252,7 +250,7 @@ ANNOTATIONS: writes output DOCX, non-idempotent.`,
 
     // Determine steps based on mode
     const steps: ScriptStep[] = []
-    const mode = args.mode || "full"
+    const mode = args.mode || "ops_only"
 
     if (mode === "full") {
       // Full mode: always re-inspect
@@ -311,79 +309,6 @@ ANNOTATIONS: writes output DOCX, non-idempotent.`,
         qa_report: qaReport,
         review_file: `${absRunDir}/review_report.json`,
         review_report: reviewReport,
-      },
-      null,
-      2,
-    )
-  },
-})
-
-export const prepareInsertPlan = tool({
-  // @ts-expect-error title is spec 2025-11-25, not yet in opencode plugin types
-  title: "DOCX Insert Plan Scaffold",
-  description: `Aggregate inspection output and source markdown into a compact reasoning scaffold.
-
-Reads docx_inspect_output.json, docx_inspect_styles_for_llm.json, and docx_inspect_content_map.json from run_dir.
-Also parses the source markdown headings so the LLM can fill content with fewer context hops.
-
-ANNOTATIONS: read-only, idempotent, local filesystem only.`,
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-  outputSchema: {
-    type: "object" as const,
-    properties: {
-      ok: { type: "boolean" },
-      scaffold_file: { type: "string" },
-      scaffold: { type: "object" },
-    },
-    required: ["ok", "scaffold_file"],
-  },
-  args: {
-    run_dir: tool.schema.string().describe("Run directory containing inspection artifacts."),
-    content_file: tool.schema.string().default("").describe("Path to the source markdown file. If omitted, the scaffold only includes inspection artifacts."),
-  },
-  async execute(args, context) {
-    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
-    const contentFile = args.content_file ? resolveWorkspacePath(context.worktree, args.content_file) : ""
-    const inspection = await readJsonFile(`${absRunDir}/docx_inspect_output.json`)
-    const stylesForLlm = await readJsonFile(`${absRunDir}/docx_inspect_styles_for_llm.json`)
-    const contentMap = await readJsonFile(`${absRunDir}/docx_inspect_content_map.json`)
-    let headings: Array<{ level: number; text: string }> = []
-    if (contentFile) {
-      try {
-        const markdownText = await new Response((globalThis as any).Bun.file(contentFile)).text()
-        headings = parseMarkdownHeadings(markdownText)
-      } catch {
-        headings = []
-      }
-    }
-
-    const scaffold = {
-      run_dir: absRunDir,
-      source_file: contentFile || null,
-      recommended_anchor: contentMap?.recommended_insert_anchor || stylesForLlm?.recommended_anchor || inspection?.content_map?.recommended_insert_anchor || null,
-      body_text_style: stylesForLlm?.body_text_style || inspection?.styles_for_llm?.body_text_style || null,
-      heading_map: stylesForLlm?.heading_map || inspection?.styles_for_llm?.heading_map || {},
-      available_styles: stylesForLlm?.available_styles || inspection?.styles_for_llm?.available_styles || [],
-      do_not_use_styles: stylesForLlm?.do_not_use_styles || inspection?.styles_for_llm?.do_not_use_styles || [],
-      front_matter: contentMap?.front_matter || inspection?.content_map?.front_matter || {},
-      body_placeholders: contentMap?.body_placeholders || inspection?.content_map?.body_placeholders || {},
-      markdown_headings: headings,
-      markdown_heading_count: headings.length,
-      paragraph_count: Array.isArray(inspection?.paragraph_sample) ? inspection.paragraph_sample.length : 0,
-    }
-
-    const scaffoldFile = `${absRunDir}/insert_plan_scaffold.json`
-    await (globalThis as any).Bun.write(scaffoldFile, JSON.stringify(scaffold, null, 2) + "\n")
-    return JSON.stringify(
-      {
-        ok: true,
-        scaffold_file: scaffoldFile,
-        scaffold,
       },
       null,
       2,
@@ -528,7 +453,7 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
 export const runPipeline = tool({
   // @ts-expect-error title is spec 2025-11-25, not yet in opencode plugin types
   title: "DOCX Pipeline Runner",
-  description: `Composite tool: inspect → validate → apply → read.
+  description: `Composite tool: inspect → validate → apply → read. NOT for normal flow; prefer the individual primitive tools so the orchestrator can keep explicit control over each phase.
 
 Use phases=["all"] for full pipeline, or custom array for partial runs.
 Prefer individual tools when you need to inspect intermediate outputs.
@@ -586,7 +511,7 @@ ANNOTATIONS: writes output artifacts, non-idempotent.`,
       .describe("Phases to run. 'all' = inspect+validate+apply+read in order."),
     mode: tool.schema
       .enum(["full", "incremental", "ops_only"])
-      .default("full")
+      .default("ops_only")
       .describe("Build mode for the apply phase (see apply_execution_ops for details)."),
   },
   async execute(args, context) {
@@ -635,7 +560,7 @@ ANNOTATIONS: writes output artifacts, non-idempotent.`,
         artifacts.validation_file = `${absRunDir}/execution_ops_validation.json`
       } else if (phase === "apply") {
         const applySteps: ScriptStep[] = []
-        const mode = args.mode || "full"
+        const mode = args.mode || "ops_only"
 
         if (mode === "full") {
           applySteps.push(["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]])

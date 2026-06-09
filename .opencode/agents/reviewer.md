@@ -33,7 +33,7 @@ Bạn là reviewer subagent. KHÔNG sửa files, KHÔNG hỏi user. Chỉ gọi 
    - Heading hierarchy (H1→H2→H3, không skip level)
    - Không còn placeholder "Nội dung …" sót
    - Heading style không bị override font/size
-   - TÀI LIỆU THAM KHẢO đủ [1]-[13]
+   - TÀI LIỆU THAM KHẢO không còn placeholder, heading và cấu trúc tham chiếu nhất quán với source
    - Không có heading spurious (ví dụ KẾT LUẬN không có trong source)
 
 ## Output Contract (BẮT BUỘC - JSON block cuối cùng)

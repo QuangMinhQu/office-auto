@@ -12,8 +12,7 @@ Scripts là tay, LLM là não.
 Các primitive này duoc expose qua ca `.opencode/tools/docx_pipeline.ts` lan `mcp/office-auto-server.ts` (server `office-auto`).
 
 1. `docx_inspect.py` — raw dump, zero heuristics
-1b. `prepareInsertPlan` — build reasoning scaffold (BẮT BUỘC)
-2. **[LLM REASONING]** — đọc scaffold + markdown, viết `execution_ops.json`
+2. **[LLM REASONING]** — đọc inspection output + markdown headings, viết `execution_ops.json`
 3. `docx_validate_ops.py` — warn-only validator
 4. `execute_execution_ops.py` — mechanical executor
 5. `docx_read_result.py` — readback để verify
@@ -40,28 +39,18 @@ Các primitive này duoc expose qua ca `.opencode/tools/docx_pipeline.ts` lan `m
 
 ## Required Steps
 
-1. `prepareInsertPlan` — aggregate inspection + markdown headings into a compact scaffold (BẮT BUỘC)
-2. `reviewOutput` — run review_docx.py and expose review artifacts (optional, post-build)
+1. `reviewOutput` — run review_docx.py and expose review artifacts (optional, post-build)
 
 ## LLM Reasoning Chain
 
 ### Bước 1 — Page layout
 Đọc `page_layout_raw` từ `docx_inspect_output.json`. Convert twips → mm: `1 twip = 1/1440 inch = 0.0176mm`.
 
-### Bước 1b — Prepare insert plan (BẮT BUỘC)
-Gọi `prepareInsertPlan` tool để nhận scaffold JSON chứa:
-- `markdown_headings[]` — list heading từ noidung.md (level + text)
-- `recommended_insert_anchor` — paraId tốt nhất để chèn body
-- `body_text_style` — style name cho body text (từ template)
-- `do_not_use_styles` — list styles cần tránh
-
-Scaffold này nhỏ (~10-20 ops equivalent) thay vì đọc toàn bộ noidung.md.
-
 ### Bước 2 — Style inheritance tree
 Đọc `styles_raw`. `space_before_pt: null` = inherited — để LLM interpret.
 
 ### Bước 3 — Classify document type
-Đọc `markdown_headings` từ scaffold (Bước 1b) + `toc_entries_raw`. Xác định academic/legal/etc.
+Đọc `markdown_headings` từ source + `toc_entries_raw`. Xác định academic/legal/etc.
 **KHÔNG đọc toàn bộ noidung.md** — chỉ cần heading structure để classify.
 
 ### Bước 4 — Map markdown → Word styles

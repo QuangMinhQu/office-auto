@@ -18,7 +18,6 @@
 - `inspectTemplate` - inspect DOCX template → dùng bởi **inspector** subagent
 - `validateExecutionOps` - validate `execution_ops.json` → dùng bởi **validator** subagent
 - `applyExecutionOps` - apply ops, luôn dùng `mode="ops_only"` → dùng bởi **applier** subagent
-- `prepareInsertPlan` - DEPRECATED trong flow mới; orchestrator tự distill từ inspector output
 - `reviewOutput` - semantic review → dùng bởi **reviewer** subagent
 - `readResult` - verify output → dùng bởi **reviewer** subagent
 - `runPipeline` - composite tool, KHÔNG dùng trong normal flow
