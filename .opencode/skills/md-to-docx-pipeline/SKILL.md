@@ -73,16 +73,27 @@ Anchor convention:
 #### Template Placeholder Rule
 Sau khi viết tất cả insert ops, LUÔN thêm remove ops cho:
 - Tất cả paragraphs trong `body_placeholders` (từ `content_map.json`)
-- **NGOẠI TRỪ**: front_matter paragraphs (TOC, title page, danh mục)
-- **NGOẠI TRỪ**: `recommended_insert_anchor` paragraph (chính là điểm neo)
+- **NGOẠI TRỪ**: paragraphs có `is_front_matter: true` trong `all_para_ids`
+- **NGOẠI TRỪ**: `CRITICAL_FIRST_OP_ANCHOR` paragraph (chính là điểm neo)
 Remove ops phải được viết trong CÙNG `execution_ops.json` với insert ops,
 không được tách thành 2 file riêng hay 2 lần chạy executor.
 
-#### Preserved Structural Headings Rule
-KHÔNG được remove các structural headings sau — chúng là navigation anchors:
-- **MỤC LỤC** heading (paraId thường là custom TOC header, ví dụ `7D417905`)
-- **KẾT LUẬN** heading (`Heading 1`)
-- **TÀI LIỆU THAM KHẢO** heading (`Heading 1`)
+#### Preserved Structural Headings Rule (DATA-DRIVEN)
+
+Khi viết remove ops cho `body_placeholders`, với MỖI paraId trong danh sách,
+kiểm tra entry tương ứng trong `all_para_ids`:
+
+```
+IF all_para_ids[paraId].is_front_matter == true → SKIP, không remove
+```
+
+Quy tắc này là **data-driven** — không cần hardcode style name hay text pattern.
+`is_front_matter` được `docx_inspect.py` gán dựa trên vị trí thực tế của paragraph
+so với `front_matter_boundary` (XML fact, không phải heuristic).
+
+**Validator enforcement**: `docx_validate_ops.py` đọc `is_front_matter` từ inspection
+data và emit `code: "REMOVE_FRONT_MATTER"` warning nếu remove op nhắm vào front matter.
+Orchestrator đọc warning này và quyết định retry.
 
 Nếu `noidung.md` không có nội dung cho KẾT LUẬN hoặc TÀI LIỆU THAM KHẢO,
 VẪN phải insert heading placeholder để navigation bar hiển thị đúng:
@@ -95,8 +106,9 @@ VẪN phải insert heading placeholder để navigation bar hiển thị đúng
 }
 ```
 
-TOC entries (style `toc 1`) cũng KHÔNG remove — chúng là navigation anchors
-cho mục lục động. Chỉ remove body content placeholders, giữ nguyên structural elements.
+TOC entries (style `toc 1`) nằm trong front matter zone → `is_front_matter: true`
+→ đã được bảo vệ tự động bởi rule trên. Chỉ remove body content placeholders,
+giữ nguyên structural elements.
 
 #### execution_ops Schema
 Mỗi op phải có field `role` để executor/validator phân biệt heading vs body:

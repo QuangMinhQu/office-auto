@@ -107,7 +107,11 @@ def has_synthetic_para_ids(template_inspection: dict) -> bool:
 
 
 def collect_front_matter_para_ids(template_inspection: dict) -> set[str]:
-    """Collect para_ids that belong to front matter."""
+    """Collect para_ids that belong to front matter — purely data-driven.
+
+    Reads is_front_matter from all_para_ids and content_map.
+    No hardcoded style names or text patterns.
+    """
     front_matter: set[str] = set()
 
     content_map = template_inspection.get("content_map", {}) or {}
@@ -126,6 +130,26 @@ def collect_front_matter_para_ids(template_inspection: dict) -> set[str]:
         front_matter.add(str(last_para_id))
 
     return front_matter
+
+
+def build_para_meta_index(template_inspection: dict) -> dict[str, dict]:
+    """Build a para_id → metadata index from all_para_ids.
+
+    Returns {para_id: {style_name, text_preview, is_front_matter, is_synthetic_id, ...}}
+    Purely data-driven — reads what docx_inspect.py dumped.
+    """
+    index: dict[str, dict] = {}
+    for entry in template_inspection.get("all_para_ids", []):
+        pid = entry.get("para_id")
+        if pid:
+            index[str(pid)] = {
+                "style_name": entry.get("style_name"),
+                "text_preview": entry.get("text_preview"),
+                "is_front_matter": entry.get("is_front_matter"),
+                "is_synthetic_id": entry.get("is_synthetic_id"),
+                "index": entry.get("index"),
+            }
+    return index
 
 
 def collect_style_effective_fonts(template_inspection: dict) -> dict[str, str]:
@@ -238,6 +262,7 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
     known_paths = collect_known_paths(template_inspection)
     known_para_ids = collect_known_para_ids(template_inspection)
     front_matter_para_ids = collect_front_matter_para_ids(template_inspection)
+    para_meta_index = build_para_meta_index(template_inspection)
     style_effective_fonts = collect_style_effective_fonts(template_inspection)
     has_synthetic = has_synthetic_para_ids(template_inspection)
 
@@ -367,14 +392,19 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
                 if path_str.startswith("/body/p[@paraId="):
                     para_id = path_str.split("@paraId=")[-1].rstrip("]")
                 if para_id and para_id in front_matter_para_ids:
+                    meta = para_meta_index.get(para_id, {})
+                    style_name = meta.get("style_name") or "unknown"
+                    text_preview = meta.get("text_preview") or ""
+                    detail = f"style='{style_name}', text='{text_preview[:40]}'" if style_name else ""
                     warnings.append({
                         "op_index": index,
                         "type": "front_matter_remove",
-                        "message": f"Remove op targets front-matter paragraph {para_id}. Front-matter paragraphs must not be removed.",
+                        "code": "REMOVE_FRONT_MATTER",
+                        "message": f"Remove op targets is_front_matter=true paragraph {para_id}. {detail}".rstrip(),
                         "severity": "high",
                         "suggested_fix": {
-                            "action": "replace_with_update_text",
-                            "keep_path": path_str,
+                            "action": "remove_this_op",
+                            "reason": f"Paragraph {para_id} is front matter (is_front_matter=true in inspection data)",
                         },
                     })
 

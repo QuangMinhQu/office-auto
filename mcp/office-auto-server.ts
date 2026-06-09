@@ -57,6 +57,11 @@ server.registerTool(
         stylesForLlm?.recommended_anchor ||
         inspection?.content_map?.recommended_insert_anchor ||
         null,
+      CRITICAL_FIRST_OP_ANCHOR:
+        contentMap?.recommended_insert_anchor ||
+        stylesForLlm?.recommended_anchor ||
+        inspection?.content_map?.recommended_insert_anchor ||
+        null,
       body_text_style: stylesForLlm?.body_text_style || inspection?.styles_for_llm?.body_text_style || null,
       heading_map: stylesForLlm?.heading_map || inspection?.styles_for_llm?.heading_map || {},
       available_styles: stylesForLlm?.available_styles || inspection?.styles_for_llm?.available_styles || [],

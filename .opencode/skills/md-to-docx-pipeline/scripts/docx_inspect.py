@@ -604,17 +604,22 @@ def dump_toc_entries(template_path: Path) -> list[dict]:
 def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
     """Layer 5: Detect front matter boundary by scanning FULL document.
 
-    Heuristic: front matter = content before first body paragraph.
-    Body paragraphs typically have "Body Text" or "Normal" style and
-    are not headings (outline_level_xml is None or paragraph has no heading style).
+    Front matter = all paragraphs before the first body paragraph.
+    Body paragraphs are: not a heading, not a TOC entry, not a figure/table list,
+    and have substantial text (>20 chars) in a body style.
+
+    TOC-style paragraphs (style name starting with 'toc') are ALWAYS front matter —
+    this is an XML fact from document.xml, not a heuristic.
 
     Returns last paraId before body content zone.
     Scans ALL paragraphs in the document, not just a sample.
     """
     from docx.oxml.ns import qn as docx_qn
 
-    # Find first paragraph that looks like body text
-    # (not a heading, has substantial text, common body style)
+    # Styles that are inherently front matter (XML facts from document.xml)
+    FRONT_MATTER_STYLE_PREFIXES = ("toc ", "toc", "table of figures", "table of authorities")
+    debug_log: list[dict] = []
+
     body_start_index = len(doc.paragraphs)
     for i, para in enumerate(doc.paragraphs):
         style_name = (para.style.name or "").lower()
@@ -629,9 +634,34 @@ def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
                 if outline_el is not None:
                     is_heading = True
 
+        # TOC-style paragraphs are inherently front matter (XML fact)
+        is_toc_style = any(style_name.startswith(prefix) for prefix in FRONT_MATTER_STYLE_PREFIXES)
+
+        para_id = get_para_id(para)
+        debug_log.append({
+            "index": i,
+            "para_id": para_id,
+            "style_name": style_name,
+            "text_preview": text[:60] if text else "",
+            "text_len": len(text),
+            "is_heading": is_heading,
+            "is_toc_style": is_toc_style,
+            "action": "scanning",
+        })
+
+        # Skip TOC-style paragraphs — they are front matter, not body
+        if is_toc_style:
+            continue
+
         if not is_heading and len(text) > 20:
             body_start_index = i
+            debug_log[-1]["action"] = "BODY_START_DETECTED"
             break
+
+    # Log TOC-style paragraphs found during scan for boundary audit
+    toc_style_indices = [e["index"] for e in debug_log if e.get("is_toc_style")]
+    if toc_style_indices:
+        print(f"[docx_inspect] front_matter_boundary: TOC-style paras at indices {toc_style_indices}, body_start_index={body_start_index}")
 
     # Last paraId before body
     if body_start_index > 0:
@@ -640,13 +670,15 @@ def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
         return {
             "last_para_id": last_para_id,
             "body_start_index": body_start_index,
-            "description": f"body starts at para index {body_start_index} (full scan, {len(doc.paragraphs)} total)",
+            "description": f"body starts at para index {body_start_index} (full scan, {len(doc.paragraphs)} total, {len(toc_style_indices)} TOC-style skipped)",
+            "debug_log": debug_log,
         }
 
     return {
         "last_para_id": None,
         "body_start_index": body_start_index,
         "description": "no boundary detected — entire doc may be front matter",
+        "debug_log": debug_log,
     }
 
 
