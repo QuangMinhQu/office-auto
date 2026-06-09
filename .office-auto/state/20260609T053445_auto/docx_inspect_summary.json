@@ -1,0 +1,16 @@
+{
+  "template_file": "/home/minhquang/office-auto/format_template.docx",
+  "extraction_timestamp": "2026-06-09T05:35:14+00:00",
+  "top_n_styles_filter": null,
+  "max_paragraphs": 30,
+  "layer_files": {
+    "styles_raw": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_styles_raw.json",
+    "styles_for_llm": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_styles_for_llm.json",
+    "page_layout_raw": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_page_layout_raw.json",
+    "paragraph_sample": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_paragraph_sample.json",
+    "toc_entries_raw": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_toc_entries_raw.json",
+    "front_matter_boundary": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_front_matter_boundary.json",
+    "content_map": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_content_map.json"
+  },
+  "combined_output": "/home/minhquang/office-auto/.office-auto/state/20260609T053445_auto/docx_inspect_output.json"
+}

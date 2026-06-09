@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DOCX Screen Review</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --panel: #fffdf8;
+      --ink: #1e1a16;
+      --muted: #6d6257;
+      --line: #d7cbbd;
+      --accent: #9f3a22;
+      --warn: #a05a00;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Georgia, 'Times New Roman', serif; background: linear-gradient(180deg, #efe7db 0%, var(--bg) 100%); color: var(--ink); }
+    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+    h1, h2, h3 { margin: 0 0 12px; }
+    .hero { background: var(--panel); border: 1px solid var(--line); padding: 24px; border-radius: 18px; box-shadow: 0 18px 40px rgba(80, 56, 32, 0.08); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 20px; }
+    .metric, .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: 0 14px 26px rgba(80, 56, 32, 0.06); }
+    .metric strong { display: block; font-size: 28px; margin-bottom: 6px; }
+    .muted, .path { color: var(--muted); }
+    .pill { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; margin-right: 8px; background: #fbf6ef; }
+    ul { margin: 10px 0 0; padding-left: 18px; }
+    .cards { display: grid; gap: 16px; margin-top: 24px; }
+    .text { white-space: pre-wrap; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { padding: 10px 8px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .warning { color: var(--warn); }
+    .accent { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>DOCX Screen Review</h1>
+      <p class="muted">A post-build visual review layer for format drift between the generated DOCX and the template baseline.</p>
+      <p><strong>Baseline review file:</strong> /home/minhquang/office-auto/format_template.docx</p>
+      <p><strong>Original template file:</strong> /home/minhquang/office-auto/format_template.docx</p>
+      <p><strong>Target file:</strong> /home/minhquang/office-auto/report.docx</p>
+      <p><strong>QA status:</strong> <span class="accent">unknown</span></p>
+      <p><strong>Baseline reason:</strong> Using source template as visual baseline.</p>
+    </section>
+    <section class="grid">
+      <div class="metric"><strong>79</strong><span class="muted">Baseline paragraphs</span></div>
+      <div class="metric"><strong>98</strong><span class="muted">Output paragraphs</span></div>
+      <div class="metric"><strong>19</strong><span class="muted">Inserted paragraphs reviewed</span></div>
+            <div class="metric"><strong>0</strong><span class="muted">Inserted paragraphs with drift</span></div>
+            <div class="metric"><strong>2</strong><span class="muted">Inserted paragraphs needing attention</span></div>
+    </section>
+        <section class="grid" style="margin-top: 18px;">
+      <div class="card">
+        <h2>Baseline Alignments</h2>
+        <ul><li><span class="pill">(none)</span> <strong>53</strong></li><li><span class="pill">justify</span> <strong>14</strong></li><li><span class="pill">center</span> <strong>10</strong></li><li><span class="pill">right</span> <strong>2</strong></li></ul>
+      </div>
+      <div class="card">
+        <h2>Output Alignments</h2>
+        <ul><li><span class="pill">(none)</span> <strong>85</strong></li><li><span class="pill">justify</span> <strong>11</strong></li><li><span class="pill">center</span> <strong>2</strong></li></ul>
+      </div>
+      <div class="card">
+        <h2>Risk Flags</h2>
+        <ul><li><span class="pill">body-centered</span> <strong>2</strong></li></ul>
+      </div>
+    </section>
+    <section class="cards">
+      <h2>Suspicious Inserted Paragraphs</h2>
+      <section class="card"><h3>#17 None <span class="path">/body/p[@paraId=3FD0B2F5]</span></h3><p class="text">BÁO CÁO CHUYÊN ĐỀ</p><p><strong>Risk flags:</strong> body-centered</p><p><strong>Expected:</strong> {}</p><p><strong>Actual:</strong> {&#x27;style&#x27;: &#x27;Normal&#x27;, &#x27;align&#x27;: &#x27;center&#x27;, &#x27;line_spacing&#x27;: None, &#x27;space_before&#x27;: None, &#x27;space_after&#x27;: None, &#x27;size&#x27;: &#x27;14pt&#x27;, &#x27;font&#x27;: None, &#x27;list_style&#x27;: None}</p><table><thead><tr><th>Field</th><th>Expected</th><th>Actual</th></tr></thead><tbody></tbody></table></section><section class="card"><h3>#18 None <span class="path">/body/p[@paraId=02614FCD]</span></h3><p class="text"></p><p><strong>Risk flags:</strong> body-centered</p><p><strong>Expected:</strong> {}</p><p><strong>Actual:</strong> {&#x27;style&#x27;: &#x27;Normal&#x27;, &#x27;align&#x27;: &#x27;center&#x27;, &#x27;line_spacing&#x27;: None, &#x27;space_before&#x27;: None, &#x27;space_after&#x27;: None, &#x27;size&#x27;: &#x27;14pt&#x27;, &#x27;font&#x27;: None, &#x27;list_style&#x27;: None}</p><table><thead><tr><th>Field</th><th>Expected</th><th>Actual</th></tr></thead><tbody></tbody></table></section>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,558 @@
+{
+  "status": "completed",
+  "target_file": "/home/minhquang/office-auto/report.docx",
+  "source_template_file": "/home/minhquang/office-auto/format_template.docx",
+  "qa_status": "unknown",
+  "comparison_baseline": {
+    "file": "/home/minhquang/office-auto/format_template.docx",
+    "reason": "Using source template as visual baseline.",
+    "summary": {
+      "paragraph_count": 79,
+      "section_count": 2,
+      "header_count": 3,
+      "footer_count": 1,
+      "toc_count": 2,
+      "field_count": 17,
+      "top_styles": [
+        {
+          "value": "Normal",
+          "count": 52
+        },
+        {
+          "value": "TOC1",
+          "count": 6
+        },
+        {
+          "value": "TOC2",
+          "count": 4
+        },
+        {
+          "value": "Heading1",
+          "count": 4
+        },
+        {
+          "value": "TableofFigures",
+          "count": 3
+        },
+        {
+          "value": "Normalstyle",
+          "count": 3
+        },
+        {
+          "value": "TOC3",
+          "count": 2
+        },
+        {
+          "value": "Bngbiu-title",
+          "count": 2
+        }
+      ],
+      "top_alignments": [
+        {
+          "value": "(none)",
+          "count": 53
+        },
+        {
+          "value": "justify",
+          "count": 14
+        },
+        {
+          "value": "center",
+          "count": 10
+        },
+        {
+          "value": "right",
+          "count": 2
+        }
+      ],
+      "top_font_sizes": [
+        {
+          "value": "14pt",
+          "count": 62
+        },
+        {
+          "value": "12pt",
+          "count": 15
+        },
+        {
+          "value": "15pt",
+          "count": 1
+        },
+        {
+          "value": "13pt",
+          "count": 1
+        }
+      ],
+      "top_line_spacings": [
+        {
+          "value": "(none)",
+          "count": 64
+        },
+        {
+          "value": "1.5x",
+          "count": 13
+        },
+        {
+          "value": "1.2x",
+          "count": 2
+        }
+      ]
+    }
+  },
+  "target_summary": {
+    "paragraph_count": 98,
+    "section_count": 1,
+    "header_count": 3,
+    "footer_count": 1,
+    "toc_count": 0,
+    "field_count": 2,
+    "top_styles": [
+      {
+        "value": "Normal",
+        "count": 87
+      },
+      {
+        "value": "Heading 2",
+        "count": 6
+      },
+      {
+        "value": "Heading 1",
+        "count": 3
+      },
+      {
+        "value": "Heading 3",
+        "count": 2
+      }
+    ],
+    "top_alignments": [
+      {
+        "value": "(none)",
+        "count": 85
+      },
+      {
+        "value": "justify",
+        "count": 11
+      },
+      {
+        "value": "center",
+        "count": 2
+      }
+    ],
+    "top_font_sizes": [
+      {
+        "value": "14pt",
+        "count": 87
+      },
+      {
+        "value": "(none)",
+        "count": 11
+      }
+    ],
+    "top_line_spacings": [
+      {
+        "value": "(none)",
+        "count": 98
+      }
+    ]
+  },
+  "inserted_paragraph_summary": {
+    "inserted_paragraph_count": 19,
+    "paragraphs_with_differences": 0,
+    "paragraphs_with_attention": 2,
+    "risk_flags": [
+      {
+        "value": "body-centered",
+        "count": 2
+      }
+    ]
+  },
+  "inserted_paragraph_reviews": [
+    {
+      "index": 0,
+      "path": "/body/p[@paraId=7FB29013]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "[8] Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., Kuttler, H., Lewis, M., Yih, W.-t., Rocktaschel, T., Riedel, S., & Kiela, D. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 1,
+      "path": "/body/p[@paraId=7FB29015]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "[9] Zhang, H., Cisse, M., Dauphin, Y. N., & Lopez-Paz, D. (2018). mixup: Beyond Empirical Risk Minimization. In International Conference on Learning Representations (ICLR 2018).",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 2,
+      "path": "/body/p[@paraId=7FB29017]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "[10] Wang, H., et al. (2025). SLMQuant: Quantization for Small Language Models. In ACM RichMediaGAI 2025.",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 3,
+      "path": "/body/p[@paraId=7FB29019]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "[11] OECD. (2024). OECD Due Diligence Guidance for Responsible AI. OECD Publishing.",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 4,
+      "path": "/body/p[@paraId=7FB2901B]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "[12] Boston Consulting Group & MIT Sloan Management Review. (2026). The State of Responsible AI in the Enterprise.",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 5,
+      "path": "/body/p[@paraId=7FB2901D]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "[13] Zylos Research. (2025). Small Language Model Market Forecast 2025-2032.",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 6,
+      "path": "/body/p[@paraId=5E9CB3ED]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 7,
+      "path": "/body/p[@paraId=32B41AD9]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 8,
+      "path": "/body/p[@paraId=61AC199D]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 9,
+      "path": "/body/p[@paraId=460B6396]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 10,
+      "path": "/body/p[@paraId=79942BDE]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 11,
+      "path": "/body/p[@paraId=44D02F0C]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 12,
+      "path": "/body/p[@paraId=66105842]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 13,
+      "path": "/body/p[@paraId=331B1895]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 14,
+      "path": "/body/p[@paraId=36E4C0F1]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 15,
+      "path": "/body/p[@paraId=7A7499CF]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 16,
+      "path": "/body/p[@paraId=641441CE]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": null,
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": []
+    },
+    {
+      "index": 17,
+      "path": "/body/p[@paraId=3FD0B2F5]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "BÁO CÁO CHUYÊN ĐỀ",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": "center",
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": [
+        "body-centered"
+      ]
+    },
+    {
+      "index": 18,
+      "path": "/body/p[@paraId=02614FCD]",
+      "role": null,
+      "block_type": "insert_paragraph_after",
+      "text": "",
+      "expected": {},
+      "actual": {
+        "style": "Normal",
+        "align": "center",
+        "line_spacing": null,
+        "space_before": null,
+        "space_after": null,
+        "size": "14pt",
+        "font": null,
+        "list_style": null
+      },
+      "differences": [],
+      "risk_flags": [
+        "body-centered"
+      ]
+    }
+  ],
+  "selected_replace_range": {},
+  "style_map": {},
+  "message": "Review artifact đã so baseline template với output và soi drift formatting trên các paragraph mới được render."
+}
