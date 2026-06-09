@@ -155,11 +155,18 @@ def collect_known_paths(template_inspection: dict) -> set[str]:
     """
     known_paths: set[str] = set()
 
-    # New schema: paragraph_sample (docx_inspect_output.json)
-    for entry in template_inspection.get("paragraph_sample", []):
+    # New schema: all_para_ids (full document, no sampling)
+    for entry in template_inspection.get("all_para_ids", []):
         pid = entry.get("para_id")
         if pid:
             known_paths.add(f"/body/p[@paraId={pid}]")
+
+    # Fallback to paragraph_sample if all_para_ids is empty
+    if not known_paths:
+        for entry in template_inspection.get("paragraph_sample", []):
+            pid = entry.get("para_id")
+            if pid:
+                known_paths.add(f"/body/p[@paraId={pid}]")
 
     # Legacy schema fallback (template_inspection_raw.json)
     body_structure = template_inspection.get("body_structure_raw", {})

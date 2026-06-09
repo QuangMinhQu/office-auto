@@ -387,7 +387,8 @@ def main() -> None:
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
-    run_state = read_json(run_dir / "run.json")
+    run_state_file = run_dir / "run.json"
+    run_state = read_json(run_state_file) if run_state_file.exists() else {"artifacts": {}}
     
     # New pipeline: read execution_ops.json (versioned schema)
     execution_ops = read_json(run_dir / "execution_ops.json") if (run_dir / "execution_ops.json").exists() else {}

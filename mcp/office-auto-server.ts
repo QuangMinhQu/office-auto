@@ -31,7 +31,7 @@ server.registerTool(
     description:
       "Read-only raw inspection of a DOCX template for LLM reasoning. Writes docx_inspect_output.json and the layer artifacts required for the DOCX pipeline.",
     inputSchema: z.object({
-      run_dir: z.string().default(""),
+      run_dir: z.string(),
       template_file: z.string(),
     }),
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -43,12 +43,34 @@ server.registerTool(
       [["docx_inspect.py", ["--template-file", absTpl, "--run-dir", absRunDir]]],
       WORKTREE,
     )
-    const inspection = await readJsonFile(`${absRunDir}/docx_inspect_output.json`)
+    const payload = await readJsonFile(`${absRunDir}/docx_inspect_output.json`)
+    const compactInspection = payload ? {
+      status: "completed",
+      template_file: absTpl,
+      run_dir: absRunDir,
+      recommended_anchor: payload.content_map?.recommended_insert_anchor || payload.styles_for_llm?.recommended_anchor || null,
+      body_text_style: payload.styles_for_llm?.body_text_style || null,
+      heading_map: payload.styles_for_llm?.heading_map || {},
+      do_not_use_styles: payload.styles_for_llm?.do_not_use_styles || [],
+      front_matter_boundary: payload.front_matter_boundary || {},
+      available_styles: (payload.styles_for_llm?.available_styles || []).slice(0, 15).map((s: any) => ({
+        name: s.name,
+        style_id: s.style_id,
+        use_for: s.use_for
+      })),
+      placeholders: (payload.all_para_ids || [])
+        .filter((p: any) => !p.is_front_matter)
+        .map((p: any) => ({
+          paraId: p.para_id,
+          text_preview: p.text_preview
+        }))
+    } : null;
+
     const output = {
       ...result,
       run_dir: absRunDir,
       inspection_file: `${absRunDir}/docx_inspect_output.json`,
-      inspection: inspection ? { ...inspection, run_dir: absRunDir } : inspection,
+      inspection: compactInspection,
     }
     return jsonToolResult(output)
   },

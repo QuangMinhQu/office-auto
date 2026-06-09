@@ -136,15 +136,15 @@ Task(
 
 Nhận `execution_ops[]` từ JSON block cuối của Planner.
 
-Orchestrator tự ghi file:
+Orchestrator tự ghi file bằng python heredoc (KHÔNG sử dụng bash `>` redirect để tránh làm hỏng JSON bởi các print statement):
 
 ```bash
-python3 -c "
-import json, sys
-ops = json.loads(sys.argv[1])
+python3 << 'PYEOF'
+import json
+ops = {execution_ops JSON}
 with open('{run_dir}/execution_ops.json', 'w', encoding='utf-8') as f:
     json.dump(ops, f, indent=2, ensure_ascii=False)
-" '{execution_ops JSON}'
+PYEOF
 ```
 
 ---
@@ -318,3 +318,8 @@ Phase 3 (retry_hint = reviewer.retry_hint)
 3. Source markdown chỉ được đọc một lần trong toàn workflow.
 4. Template chỉ được inspect một lần trong toàn workflow.
 5. Reviewer là nguồn sự thật cuối cùng để quyết định hoàn thành.
+
+# Tránh Thinking Loop (Anti-Thinking Loop Guidelines)
+
+- Khi đã quyết định chọn một strategy để ghi file hoặc sửa lỗi, hãy tiến hành thực thi ngay lập tức ở bước tiếp theo. Không suy nghĩ lặp đi lặp lại quá 2 lần về cùng một vấn đề.
+- Sử dụng "Commit marker" trong suy nghĩ: Ví dụ `DECISION: [Strategy chosen]. Thực hiện ngay lập tức.` để đánh dấu sự hoàn thành của bước suy nghĩ và chuyển sang hành động.

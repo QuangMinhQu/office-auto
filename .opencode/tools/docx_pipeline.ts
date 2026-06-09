@@ -61,7 +61,7 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     required: ["ok", "inspection_file", "run_dir"],
   },
   args: {
-    run_dir: tool.schema.string().default("").describe("Run directory path under .office-auto/state/. If omitted or shell-like, a new run dir is generated automatically."),
+    run_dir: tool.schema.string().describe("Run directory under .office-auto/state/."),
     template_file: tool.schema.string().describe("Absolute or relative path to the .docx template file to inspect."),
   },
   async execute(args, context) {
@@ -73,12 +73,36 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     )
     // New schema: read from docx_inspect_output.json (combined output)
     const payload = await readJsonFile(`${absRunDir}/docx_inspect_output.json`)
+    
+    // Construct compact inspection payload for the subagent/LLM reasoning
+    const compactInspection = payload ? {
+      status: "completed",
+      template_file: absTplFile,
+      run_dir: absRunDir,
+      recommended_anchor: payload.content_map?.recommended_insert_anchor || payload.styles_for_llm?.recommended_anchor || null,
+      body_text_style: payload.styles_for_llm?.body_text_style || null,
+      heading_map: payload.styles_for_llm?.heading_map || {},
+      do_not_use_styles: payload.styles_for_llm?.do_not_use_styles || [],
+      front_matter_boundary: payload.front_matter_boundary || {},
+      available_styles: (payload.styles_for_llm?.available_styles || []).slice(0, 15).map((s: any) => ({
+        name: s.name,
+        style_id: s.style_id,
+        use_for: s.use_for
+      })),
+      placeholders: (payload.all_para_ids || [])
+        .filter((p: any) => !p.is_front_matter)
+        .map((p: any) => ({
+          paraId: p.para_id,
+          text_preview: p.text_preview
+        }))
+    } : null;
+
     return JSON.stringify(
       {
         ...result,
         run_dir: absRunDir,
         inspection_file: `${absRunDir}/docx_inspect_output.json`,
-        inspection: payload ? { ...payload, run_dir: absRunDir } : payload,
+        inspection: compactInspection,
       },
       null,
       2,
