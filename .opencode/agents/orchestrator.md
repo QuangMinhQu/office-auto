@@ -147,7 +147,7 @@ Task(
 )
 ```
 
-Nhận `execution_ops[]` từ JSON block cuối của Planner.
+Nhận `ops[]` từ JSON block cuối của Planner.
 
 Nếu `use_chunked_planning = true`:
 
@@ -157,8 +157,8 @@ Nếu `use_chunked_planning = true`:
 
 Sau khi nhận kết quả từ planner, validate ngay:
 
-1. JSON parseable
-2. `ops_count` trong khoảng hợp lý, tối đa 120
+1. JSON parseable, có key `ops` (array) và `version: "2"`
+2. `ops.length` trong khoảng hợp lý, tối đa 80
 3. Có ít nhất 1 `insert_paragraph_after`
 
 Nếu validation fail:

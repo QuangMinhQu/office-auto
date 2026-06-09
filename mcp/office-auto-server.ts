@@ -58,12 +58,11 @@ server.registerTool(
         style_id: s.style_id,
         use_for: s.use_for
       })),
-      placeholders: (payload.all_para_ids || [])
-        .filter((p: any) => !p.is_front_matter)
-        .map((p: any) => ({
-          paraId: p.para_id,
-          text_preview: p.text_preview
-        }))
+      placeholders: (payload.all_para_ids || []).map((p: any) => ({
+        paraId: p.para_id,
+        text_preview: p.text_preview,
+        is_front_matter: !!p.is_front_matter,
+      }))
     } : null;
 
     const output = {
@@ -118,7 +117,7 @@ server.registerTool(
       ops_file: z.string().default(""),
       target_file: z.string(),
       source_file: z.string().default(""),
-      mode: z.enum(["full", "incremental", "ops_only"]).default("full"),
+      mode: z.enum(["full", "incremental", "ops_only"]).default("ops_only"),
     }),
     annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
   },
