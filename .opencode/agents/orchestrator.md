@@ -55,10 +55,14 @@ scaffold_summary: null
 source_content: null
 retry_count: 0
 MAX_RETRY: 3
+estimated_ops: null
+use_chunked_planning: false
 ```
 
 - `scaffold_summary` → populate sau Phase 1
 - `source_content` → populate sau Phase 2
+- `estimated_ops` → ước lượng trước Phase 3 để quyết định chunking
+- `use_chunked_planning` → bật khi content quá lớn cho 1 lần plan
 
 ---
 
@@ -118,6 +122,13 @@ Lưu toàn bộ nội dung vào:
 source_content
 ```
 
+Ước lượng `estimated_ops` từ `markdown_headings` và độ dày nội dung của từng section.
+
+- Nếu `estimated_ops > 40` hoặc file có nhiều chapter lớn, bật `use_chunked_planning = true`
+- Nếu `use_chunked_planning = true`, chia `source_content` theo các H1/H2 chapter lớn rồi plan theo chunk
+- Chỉ truyền chunk hiện tại cho planner, không truyền lại toàn bộ `source_content` nếu đã chunk
+- Khi chunking, giữ continuity bằng cách truyền anchor cuối của chunk trước làm mốc cho chunk sau
+
 ---
 
 # Phase 3 — Plan
@@ -128,13 +139,32 @@ Task(
   prompt=JSON.stringify({
     scaffold_summary: scaffold_summary,
     markdown_headings: markdown_headings,
-    source_content: source_content,
-    retry_hint: null
+    source_content: source_content_or_chunk,
+    retry_hint: null,
+    chunk_id: chunk_id_or_null,
+    previous_chunk_last_anchor: previous_chunk_last_anchor_or_null
   })
 )
 ```
 
 Nhận `execution_ops[]` từ JSON block cuối của Planner.
+
+Nếu `use_chunked_planning = true`:
+
+- Gọi planner theo từng chunk, không gọi nhiều hơn 1 lần cho cùng một chunk trừ khi retry
+- Merge ops từ các chunk theo thứ tự chapter
+- Không truyền toàn bộ `source_content` khi đã chunk xong
+
+Sau khi nhận kết quả từ planner, validate ngay:
+
+1. JSON parseable
+2. `ops_count` trong khoảng hợp lý, tối đa 120
+3. Có ít nhất 1 `insert_paragraph_after`
+
+Nếu validation fail:
+
+- Retry đúng 1 lần với `retry_hint` rõ ràng
+- Nếu vẫn fail sau retry, dừng workflow và báo user thay vì tiếp tục loop
 
 Orchestrator tự ghi file bằng python heredoc (KHÔNG sử dụng bash `>` redirect để tránh làm hỏng JSON bởi các print statement):
 
