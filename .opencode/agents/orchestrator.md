@@ -137,6 +137,7 @@ source_content
 Task(
   agent="planner",
   prompt=JSON.stringify({
+    run_dir: run_dir,
     scaffold_summary: scaffold_summary,
     markdown_headings: markdown_headings,
     source_content: source_content_or_chunk,
@@ -147,15 +148,29 @@ Task(
 )
 ```
 
-Nhận `ops[]` từ JSON block cuối của Planner.
+Planner sẽ tự gọi `write_file(path="{run_dir}/execution_ops.json", ...)` — viết trực tiếp ra disk.
+Sau đó đọc file để verify:
+
+```bash
+cat {run_dir}/execution_ops.json | python3 -m json.tool > /dev/null
+```
+
+Parse JSON block cuối từ Planner để verify `ops_count` và `ok`.
 
 Nếu `use_chunked_planning = true`:
 
 - Gọi planner theo từng chunk, không gọi nhiều hơn 1 lần cho cùng một chunk trừ khi retry
 - Merge ops từ các chunk theo thứ tự chapter
+- Ghi merged ops vào `{run_dir}/execution_ops.json` sau khi merge
 - Không truyền toàn bộ `source_content` khi đã chunk xong
 
-Sau khi nhận kết quả từ planner, validate ngay:
+Orchestrator tự đọc file để verify (planner đã write_file ra disk):
+
+```bash
+cat {run_dir}/execution_ops.json | python3 -m json.tool > /dev/null
+```
+
+Sau khi verify, validate ngay:
 
 1. JSON parseable, có key `ops` (array) và `version: "2"`
 2. `ops.length` trong khoảng hợp lý, tối đa 80
@@ -166,20 +181,14 @@ Nếu validation fail:
 - Retry đúng 1 lần với `retry_hint` rõ ràng
 - Nếu vẫn fail sau retry, dừng workflow và báo user thay vì tiếp tục loop
 
-Orchestrator tự ghi file bằng python heredoc (KHÔNG sử dụng bash `>` redirect để tránh làm hỏng JSON bởi các print statement):
-
-```bash
-python3 << 'PYEOF'
-import json
-ops = {execution_ops JSON}
-with open('{run_dir}/execution_ops.json', 'w', encoding='utf-8') as f:
-    json.dump(ops, f, indent=2, ensure_ascii=False)
-PYEOF
-```
-
 ---
 
 # Phase 4 — Validate
+
+- Retry đúng 1 lần với `retry_hint` rõ ràng
+- Nếu vẫn fail sau retry, dừng workflow và báo user thay vì tiếp tục loop
+
+Nếu validation fail:
 
 ```text
 Task(

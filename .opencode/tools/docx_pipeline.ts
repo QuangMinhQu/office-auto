@@ -1,7 +1,8 @@
 import { tool } from "@opencode-ai/plugin"
 import {
+  fileExists,
   readJsonFile,
-  resolveInspectionRunDir,
+  resolveRunDir,
   resolveRunDirArtifact,
   resolveWorkspacePath,
   runSteps,
@@ -64,7 +65,7 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     template_file: tool.schema.string().describe("Absolute or relative path to the .docx template file to inspect."),
   },
   async execute(args, context) {
-    const absRunDir = resolveInspectionRunDir(context.worktree, args.run_dir)
+    const absRunDir = resolveRunDir(context.worktree, args.run_dir)
     const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
     const result = await runSteps(
       [["docx_inspect.py", ["--template-file", absTplFile, "--run-dir", absRunDir]]],
@@ -158,7 +159,7 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     strict_mode: tool.schema.boolean().default(false).describe("If true, warnings are treated as errors."),
   },
   async execute(args, context) {
-    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absRunDir = resolveRunDir(context.worktree, args.run_dir)
     const absOpsFile = resolveRunDirArtifact(absRunDir, args.ops_file, "execution_ops.json")
     const validateArgs = ["--run-dir", absRunDir, "--ops-file", absOpsFile]
     if (args.strict_mode) {
@@ -239,10 +240,24 @@ ANNOTATIONS: writes output DOCX, non-idempotent.`,
       .describe("'full' re-inspects; 'incremental' skips if output exists; 'ops_only' executes only."),
   },
   async execute(args, context) {
-    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absRunDir = resolveRunDir(context.worktree, args.run_dir)
     const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
     const absOpsFile = resolveRunDirArtifact(absRunDir, args.ops_file, "execution_ops.json")
     const absTargetFile = resolveWorkspacePath(context.worktree, args.target_file)
+
+    const mode = args.mode || "ops_only"
+    if (mode === "ops_only") {
+      const validationExists = await fileExists(`${absRunDir}/execution_ops_validation.json`)
+      if (!validationExists) {
+        return JSON.stringify({
+          ok: false,
+          error: "VALIDATION_NOT_RUN",
+          hint: "Must call validateExecutionOps before applyExecutionOps with mode=ops_only.",
+          run_dir: absRunDir,
+        }, null, 2)
+      }
+    }
+
     const compileArgs = ["--run-dir", absRunDir, "--ops-file", absOpsFile, "--template-file", absTplFile, "--target-file", absTargetFile]
     if (args.source_file) {
       compileArgs.push("--source-file", resolveWorkspacePath(context.worktree, args.source_file))
@@ -250,7 +265,6 @@ ANNOTATIONS: writes output DOCX, non-idempotent.`,
 
     // Determine steps based on mode
     const steps: ScriptStep[] = []
-    const mode = args.mode || "ops_only"
 
     if (mode === "full") {
       // Full mode: always re-inspect
@@ -351,7 +365,7 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
     run_dir: tool.schema.string().describe("Run directory containing build_report.json and review inputs."),
   },
   async execute(args, context) {
-    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absRunDir = resolveRunDir(context.worktree, args.run_dir)
     const result = await runSteps([["review_docx.py", ["--run-dir", absRunDir]]], context.worktree)
     const payload = await readJsonFile(`${absRunDir}/review_report.json`)
     return JSON.stringify(
@@ -426,7 +440,7 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
       .describe("Optional list of section names/keys to filter the readback. Empty array returns full result."),
   },
   async execute(args, context) {
-    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absRunDir = resolveRunDir(context.worktree, args.run_dir)
     const steps: ScriptStep[] = [["docx_read_result.py", ["--run-dir", absRunDir]]]
     if (args.target_file) {
       steps[0][1].push("--file", resolveWorkspacePath(context.worktree, args.target_file))
@@ -515,7 +529,7 @@ ANNOTATIONS: writes output artifacts, non-idempotent.`,
       .describe("Build mode for the apply phase (see apply_execution_ops for details)."),
   },
   async execute(args, context) {
-    const absRunDir = resolveWorkspacePath(context.worktree, args.run_dir)
+    const absRunDir = resolveRunDir(context.worktree, args.run_dir)
     const absTplFile = resolveWorkspacePath(context.worktree, args.template_file)
     const absOpsFile = resolveRunDirArtifact(absRunDir, args.ops_file, "execution_ops.json")
     const absTargetFile = resolveWorkspacePath(context.worktree, args.target_file)

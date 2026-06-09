@@ -12,6 +12,39 @@ type BunLike = {
 
 const BunRuntime = (globalThis as any).Bun as BunLike | undefined
 
+let _pythonPath: string | null = null
+const PYTHON_CANDIDATES = ["python3", "python", "/usr/bin/python3", "/usr/bin/python"]
+
+async function findPython(): Promise<string> {
+  if (_pythonPath) return _pythonPath
+  const tried: string[] = []
+  for (const candidate of PYTHON_CANDIDATES) {
+    tried.push(candidate)
+    try {
+      let ok = false
+      if (BunRuntime) {
+        const proc = BunRuntime.spawn([candidate, "--version"], { cwd: "/", stdout: "pipe", stderr: "pipe" })
+        const code = await proc.exited
+        ok = code === 0
+      } else {
+        const code = await new Promise<number>((resolve) => {
+          const p = nodeSpawn(candidate, ["--version"])
+          p.on("close", (c) => resolve(c ?? 1))
+          p.on("error", () => resolve(1))
+        })
+        ok = code === 0
+      }
+      if (ok) {
+        _pythonPath = candidate
+        return candidate
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error(`Python not found. Tried: ${tried.join(", ")}. Install python3 or add to PATH.`)
+}
+
 export type ScriptStep = [string, string[]]
 
 export type ScriptResult = {
@@ -52,12 +85,15 @@ export function makeAutoRunDir(worktree: string, suffix = "auto"): string {
   return `${worktree.replace(/\/+$/, "")}/.office-auto/state/${ts}_${suffix}`
 }
 
-export function resolveInspectionRunDir(worktree: string, inputPath: string): string {
+export function resolveRunDir(worktree: string, inputPath: string): string {
   if (!inputPath || inputPath.includes("$(")) {
-    return makeAutoRunDir(worktree, "inspect")
+    return makeAutoRunDir(worktree, "auto")
   }
   return resolveWorkspacePath(worktree, inputPath)
 }
+
+/** @deprecated Use resolveRunDir instead */
+export const resolveInspectionRunDir = resolveRunDir
 
 export function resolveRunDirArtifact(runDir: string, inputPath: string, fallbackFile: string): string {
   if (inputPath) {
@@ -82,8 +118,9 @@ export function parseMarkdownHeadings(markdownText: string): Array<{ level: numb
 }
 
 export async function runScript(script: string, args: string[], worktree: string): Promise<ScriptResult> {
+  const python = await findPython()
   const scriptPath = `${worktree}/.opencode/skills/md-to-docx-pipeline/scripts/${script}`
-  const command = ["python3", scriptPath, ...args]
+  const command = [python, scriptPath, ...args]
   let stdout = ""
   let stderr = ""
   let exitCode = 0
