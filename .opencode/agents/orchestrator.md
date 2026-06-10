@@ -5,7 +5,7 @@ model: sglang/Qwen3.6-35B-A3B-GGUF
 temperature: 0.6
 top_p: 0.95
 top_k: 20
-steps: 60
+steps: 25
 permission:
   bash: allow
   edit: allow
@@ -133,6 +133,15 @@ source_content
 
 # Phase 3 — Plan
 
+## Pre-Phase 3 Checklist (bắt buộc verify trước khi spawn planner)
+- [ ] scaffold_summary đã được populate từ Inspector output?
+- [ ] source_content đã được đọc bằng Read tool?
+- [ ] estimated_ops đã được ước lượng?
+- [ ] use_chunked_planning đã được quyết định?
+
+Nếu bất kỳ item nào = false → KHÔNG spawn Planner, quay lại phase tương ứng.
+DECISION RULE: Sau khi checklist = all true → spawn Planner ngay, KHÔNG reasoning thêm.
+
 ```text
 Task(
   agent="planner",
@@ -176,10 +185,18 @@ Sau khi verify, validate ngay:
 2. `ops.length` trong khoảng hợp lý, tối đa 80
 3. Có ít nhất 1 `insert_paragraph_after`
 
+## Phase 3 Failure Guard (HARD)
+
+Nếu Planner output không parse được hoặc ops_count < 5:
+  → KHÔNG tự viết ops
+  → Retry Planner 1 lần với retry_hint="Output bị truncate, viết lại ops ngắn gọn hơn"
+  → Nếu retry vẫn fail → STOP, báo user: "Planner failed after retry"
+
 Nếu validation fail:
 
 - Retry đúng 1 lần với `retry_hint` rõ ràng
 - Nếu vẫn fail sau retry, dừng workflow và báo user thay vì tiếp tục loop
+- KHÔNG tự fallback viết ops — luôn để Planner viết lại
 
 ---
 
@@ -349,6 +366,9 @@ Phase 3 (retry_hint = reviewer.retry_hint)
 - Re-inspect template trong retry loop
 - Tăng `retry_count` khi applier fail
 - Báo `"done"` khi reviewer chưa trả `passed=true`
+- Loop reasoning quá 2 turns về cùng một quyết định
+- Tự gọi bất kỳ tool nào (kể cả bash write) cho ops generation
+- Viết bất kỳ file artifact nào — chỉ subagent mới được write file
 
 # Invariants
 

@@ -5,7 +5,7 @@ model: sglang/Qwen3.6-35B-A3B-GGUF
 temperature: 0.4
 top_p: 0.95
 top_k: 20
-steps: 4
+steps: 8
 hidden: true
 permission:
   bash: deny

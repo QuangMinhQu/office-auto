@@ -31,8 +31,7 @@ Hệ thống vận hành theo mô hình phân cấp, trong đó **Orchestrator**
 * **Quản lý dữ liệu (Nắm giữ):** Chịu trách nhiệm quản lý các trạng thái và dữ liệu bao gồm: `scaffold_summary`, `source_content`, `execution_ops`, và `retry_count`.
 * **Xử lý tác vụ (Tự thực hiện):**
 * Phân tích cấu trúc tiêu đề (Markdown headings).
-* Tạo file `execution_ops.json` (dạng Bash).
-* Thực hiện vá lỗi (patch) cho `execution_ops` khi nhận cảnh báo từ quá trình xác thực.
+* Quản lý retry loop: khi Validator báo lỗi, spawn Planner với `retry_hint` mới (KHÔNG tự patch ops).
 
 
 
@@ -59,6 +58,21 @@ Các tác nhân phụ hoạt động dưới sự giám sát chặt chẽ của 
 * **Cơ chế spawn:** Subagents chỉ được phép khởi tạo bởi **Orchestrator** thông qua `Task tool`.
 * **Định dạng giao tiếp:** Output của các Subagents bắt buộc phải kết thúc bằng một **JSON block** để Orchestrator có thể phân tích cú pháp (parse) chính xác.
 * **Phân cấp giới hạn:** Subagents **không được phép** tự khởi tạo các Subagent khác (quyền này bị từ chối/deny trên toàn bộ hệ thống).
+
+### 4. Topology Contract (HARD — không có ngoại lệ)
+
+Orchestrator KHÔNG bao giờ:
+- Gọi tool trực tiếp (kể cả bash write_file cho artifact)
+- Reasoning > 2 turns về cùng một quyết định
+- Generate ops content inline trong thinking
+- Tự viết bất kỳ file artifact nào — chỉ subagent mới được write file
+
+Orchestrator CHỈ:
+- Gọi bash để đọc (grep, cat, python3 -m json.tool để verify)
+- Spawn subagent qua Task tool
+- Parse JSON block output từ subagent
+- Quyết định bước tiếp theo dựa trên parse output
+
 ## Retry Protocol
 - Retry loop do orchestrator quản lý, KHÔNG phải subagent
 - Mỗi retry: orchestrator đã có scaffold_summary (cache từ Phase 1) → chỉ spawn Planner với retry_hint mới
