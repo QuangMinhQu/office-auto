@@ -49,6 +49,43 @@ from officecli_native import (
 )
 
 
+def build_style_lookup(run_dir: Path) -> dict[str, str]:
+    """Build name→style_id lookup from inspection data.
+
+    This is a DETERMINISTIC 1-1 lookup (hands, not brain). Reads styles_raw
+    and builds bidirectional map so the executor can normalize any style
+    reference (display name or style_id) to the canonical style_id.
+    """
+    lookup: dict[str, str] = {}
+    styles_file = run_dir / "docx_inspect_styles_raw.json"
+    if not styles_file.exists():
+        return lookup
+    try:
+        styles = read_json(styles_file)
+    except Exception:
+        return lookup
+    for entry in styles:
+        sid = entry.get("style_id")
+        name = entry.get("name")
+        if sid:
+            lookup[str(sid)] = str(sid)
+            if name:
+                lookup[str(name)] = str(sid)
+    return lookup
+
+
+def normalize_style(style: str, style_lookup: dict[str, str]) -> str:
+    """Deterministic style normalization: name → style_id, or pass-through.
+
+    Returns the canonical style_id for use with OfficeCLI. If the style
+    value is already a valid style_id, returns it unchanged. Falls back
+    to the original value if no lookup matches.
+    """
+    if not style:
+        return "Normal"
+    return style_lookup.get(str(style), str(style))
+
+
 # Batch sizes for efficiency
 REMOVE_BATCH_SIZE = 200
 ADD_BATCH_SIZE = 40
@@ -840,6 +877,22 @@ def main() -> None:
 
     print(f"[execute_execution_ops] Reading ops from: {ops_file}")
     print(f"[execute_execution_ops] Target: {target_path}")
+
+    # Build style lookup for deterministic name→style_id normalization (hands, not brain)
+    style_lookup = build_style_lookup(run_dir)
+
+    # Normalize all style references in ops to canonical style_id
+    if style_lookup:
+        normalized_count = 0
+        for op in ops_list:
+            if "style" in op:
+                original = op["style"]
+                normalized = normalize_style(str(original), style_lookup)
+                if normalized != original:
+                    op["style"] = normalized
+                    normalized_count += 1
+        if normalized_count > 0:
+            print(f"[execute_execution_ops] Normalized {normalized_count} style names to style_id")
 
     # Get range info for anchor resolution
     range_info = ops_dict.get("selected_replace_range") or ops_dict.get("range") or None

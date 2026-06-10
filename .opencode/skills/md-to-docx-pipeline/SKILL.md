@@ -62,9 +62,12 @@ Trước khi map markdown → Word styles, kiểm tra:
   theo `#` count (source of truth).
 
 ### Bước 4 — Map markdown → Word styles
-- `# heading` → `Heading 1` (outline_level_xml: 0)
-- `## heading` → `Heading 2` (outline_level_xml: 1)
-- `paragraph` → `Body Text` (first_line_indent: 36pt)
+- `# heading` → style from `heading_map.h1` (outline_level_xml: 0)
+- `## heading` → style from `heading_map.h2` (outline_level_xml: 1)
+- `### heading` → style from `heading_map.h3` (outline_level_xml: 2)
+- `paragraph` → `body_text_style` (first_line_indent: 36pt)
+
+`heading_map` uses `style_id` (not display name): `{"h1": "TieuDe1", "h2": "TieuDe2", "h3": "TieuDe3"}`
 
 ### Bước 5 — Viết execution_ops.json
 Mỗi paragraph trong noidung.md → 1 op.
@@ -132,7 +135,7 @@ Mỗi op phải có field `role` để executor/validator phân biệt heading v
       "op": "insert_paragraph_after",
       "role": "h1",
       "anchor": "/body/p[@paraId=49349C0D]",
-      "style": "Heading1",
+      "style": "<style_id from heading_map.h1>",
       "text": "CHƯƠNG 1. CƠ SỞ LÝ THUYẾT",
       "bookmark": "_Toc_ch1"
     },
@@ -140,7 +143,7 @@ Mỗi op phải có field `role` để executor/validator phân biệt heading v
       "op": "insert_paragraph_after",
       "role": "body",
       "anchor": "PREVIOUS",
-      "style": "BodyText",
+      "style": "<body_text_style>",
       "text": "Nội dung chương 1...",
       "run_props": { "font": "Times New Roman", "size_pt": 13 },
       "para_props": { "first_line_indent_pt": 36, "line_spacing": 1.5 }

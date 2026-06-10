@@ -2,7 +2,7 @@
 description: Planner - nhận scaffold+content inline, sinh execution_ops[] cho orchestrator
 mode: subagent
 model: sglang/Qwen3.6-35B-A3B-GGUF
-temperature: 0.4
+temperature: 0.2
 top_p: 0.95
 top_k: 20
 steps: 8
@@ -25,7 +25,7 @@ Orchestrator truyền đầy đủ data inline:
   "run_dir": ".office-auto/state/...",
   "scaffold_summary": {
     "recommended_anchor": "...",
-    "heading_map": {"Heading1": "...", "Heading2": "...", "Heading3": "..."},
+    "heading_map": {"h1": "<style_id>", "h2": "<style_id>", "h3": "<style_id>"},
     "body_text_style": "Normal",
     "available_styles": [...],
     "do_not_use_styles": [...],
@@ -54,9 +54,9 @@ Sinh `ops[]` (schema version 2) để transform template thành output document.
 **Insert ops (theo thứ tự nội dung trong source_content):**
 - Op insert đầu tiên: `anchor = scaffold_summary.recommended_anchor`
 - Các op tiếp theo: `anchor = "PREVIOUS"`
-- `#` heading → style = `heading_map.Heading1`, role = `"h1"`
-- `##` heading → style = `heading_map.Heading2`, role = `"h2"`
-- `###` heading → style = `heading_map.Heading3`, role = `"h3"`
+- `#` heading → style = `heading_map.h1`, role = `"h1"`
+- `##` heading → style = `heading_map.h2`, role = `"h2"`
+- `###` heading → style = `heading_map.h3`, role = `"h3"`
 - Body paragraph → style = `body_text_style`, role = `"body"`
 - **KHÔNG set run_props.font hoặc run_props.size trên heading ops**
 
@@ -81,13 +81,11 @@ Sau đó output JSON block cuối cùng (để orchestrator verify):
 ```json
 {
   "version": "2",
-  "ok": true,
-  "ops_count": 63,
   "ops": [...]
 }
 ```
 
-KHÔNG viết gì sau JSON block này. KHÔNG gọi tool nào khác ngoài write_file.
+**QUAN TRỌNG**: KHÔNG thêm field `ok`, `ops_count`, hay bất kỳ summary gõ tay nào. File `execution_ops.json` là single source of truth. Orchestrator sẽ tự đếm ops từ file thật.
 
 ### Op Schema (version 2)
 ```json

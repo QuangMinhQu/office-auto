@@ -70,8 +70,17 @@ export function registerScaffoldTool(server: McpServer, worktree: string) {
           para_ids: bodyParaIds.slice(0, 50),
           description: bodyPlaceholders.description || "",
           total_count: bodyParaIds.length,
+          details: (inspection?.all_para_ids || [])
+            .filter((p: any) => !p.is_front_matter && bodyParaIds.includes(p.para_id))
+            .slice(0, 50)
+            .map((p: any) => ({
+              paraId: p.para_id,
+              text_preview: (p.text_preview || "").slice(0, 60),
+              is_front_matter: p.is_front_matter || false,
+              style_name: p.style_name || null,
+            })),
         },
-        placeholder_note: "Only first 50 body placeholders shown. Full list in docx_inspect_content_map.json",
+        placeholder_note: "Only first 50 body placeholders shown. Full list in docx_inspect_content_map.json. Each entry carries is_front_matter and style_name for LLM reasoning.",
         markdown_headings: headings,
         markdown_heading_count: headings.length,
         paragraph_count: Array.isArray(inspection?.paragraph_sample) ? inspection.paragraph_sample.length : 0,

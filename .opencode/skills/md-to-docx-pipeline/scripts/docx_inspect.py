@@ -149,12 +149,20 @@ def dump_styles(doc: Any, theme_fonts: dict[str, str | None]) -> list[dict]:
     """Layer 1: Style catalog — RAW, no resolve, no classify.
 
     For each style, return:
-      - name, style_id, base_style name (or None)
+      - name, style_id, base_style name (or None), based_on_chain (full inheritance path)
       - Raw Pt values (None = inherited, LLM self-computes)
       - outline_level_xml: raw w:outlineLvl @w:val (0-9 = heading levels 1-10)
+      - usage_count: how many paragraphs use this style (frequency signal for role detection)
       - No "heading_level", no "resolved_spacing", no "is_heading"
     """
     from docx.oxml.ns import qn
+
+    # Count style usage across all paragraphs (frequency signal for role detection)
+    style_usage: dict[str, int] = {}
+    for para in doc.paragraphs:
+        sname = para.style.style_id if para.style else None
+        if sname:
+            style_usage[sname] = style_usage.get(sname, 0) + 1
 
     styles_raw: list[dict] = []
     for style in doc.styles:
@@ -166,7 +174,17 @@ def dump_styles(doc: Any, theme_fonts: dict[str, str | None]) -> list[dict]:
             "name": style.name,
             "style_id": style.style_id,
             "base_style": style.base_style.name if style.base_style else None,
+            "usage_count": style_usage.get(style.style_id, 0),
         }
+
+        # Build based_on chain for LLM to understand inheritance
+        based_on_chain: list[str] = []
+        cursor = style.base_style
+        while cursor is not None and cursor.style_id not in based_on_chain:
+            based_on_chain.append(cursor.style_id)
+            cursor = cursor.base_style if cursor.base_style != cursor else None
+        if based_on_chain:
+            entry["based_on_chain"] = based_on_chain
         # Raw Pt values — None means inherited from base style
         if fmt.space_before is not None:
             entry["space_before_pt"] = float(fmt.space_before.pt)
@@ -278,10 +296,13 @@ def dump_page_layout(template_path: Path) -> dict[str, str | None]:
 def dump_paragraph_sample(doc: Any, max_count: int = 30) -> list[dict]:
     """Layer 3: Sample paragraphs — LLM self-identifies structure.
 
-    Returns raw text + style + paraId. No heading classification.
+    Returns raw text + style + paraId + paragraph-level outlineLvl +
+    numbering pattern + first-run font info. No heading classification.
+    Helps LLM detect headings even when style-level outlineLvl is missing.
     Default max_count=30 per issue.md spec.
     """
     from docx.oxml.ns import qn
+    import re
 
     # Multiple namespaces that may contain paraId
     PARA_ID_NAMESPACES = [
@@ -289,6 +310,8 @@ def dump_paragraph_sample(doc: Any, max_count: int = 30) -> list[dict]:
         qn('w14:paraId'),
         '{http://schemas.microsoft.com/office/word/2010/wordml}paraId',
     ]
+
+    NUMBERING_PATTERN = re.compile(r'^(\d+(?:\.\d+)*)\.?\s')
 
     sample_paras: list[dict] = []
     for i, para in enumerate(doc.paragraphs[:max_count]):
@@ -309,6 +332,30 @@ def dump_paragraph_sample(doc: Any, max_count: int = 30) -> list[dict]:
         }
         if para_id is not None:
             entry["para_id"] = para_id
+
+        # Paragraph-level outlineLvl (from pPr, not just style)
+        pPr = element.find(qn('w:pPr'))
+        if pPr is not None:
+            outline = pPr.find(qn('w:outlineLvl'))
+            if outline is not None:
+                entry["para_outline_level_xml"] = outline.get(qn('w:val'))
+
+        # Numbering pattern detection (pure raw data, no classification)
+        text = para.text or ""
+        num_match = NUMBERING_PATTERN.match(text.strip())
+        if num_match:
+            entry["numbering_prefix"] = num_match.group(1)
+            entry["numbering_depth"] = len(num_match.group(1).split('.'))
+
+        # First-run font info (can signal heading when bold+large)
+        runs = para.runs
+        if runs:
+            first_run = runs[0]
+            if first_run.font.size:
+                entry["first_run_size_pt"] = float(first_run.font.size.pt)
+            entry["first_run_bold"] = bool(first_run.font.bold)
+            if first_run.font.name:
+                entry["first_run_font"] = first_run.font.name
 
         fmt = para.paragraph_format
         if fmt.space_before is not None:
@@ -475,11 +522,11 @@ def summarize_styles_for_llm(styles_raw: list[dict]) -> dict[str, Any]:
 
         outline_level = style.get("outline_level_xml")
         if outline_level == "0":
-            heading_map.setdefault("chapter_title", str(style_id or name))
+            heading_map.setdefault("h1", str(style_id))
         elif outline_level == "1":
-            heading_map.setdefault("section", str(style_id or name))
+            heading_map.setdefault("h2", str(style_id))
         elif outline_level == "2":
-            heading_map.setdefault("subsection", str(style_id or name))
+            heading_map.setdefault("h3", str(style_id))
 
         if str(name or "") in {"Normal", "Default Paragraph Font"} and str(name or "") not in do_not_use_styles:
             do_not_use_styles.append(str(name))
@@ -497,8 +544,10 @@ def summarize_styles_for_llm(styles_raw: list[dict]) -> dict[str, Any]:
                 "use_for": use_for,
                 "effective_font": effective_font,
                 "font_size_pt": style.get("run", {}).get("font_size_pt"),
+                "font_bold": style.get("run", {}).get("font_bold"),
                 "line_spacing": style.get("line_spacing"),
                 "first_line_indent_pt": style.get("first_line_indent_pt"),
+                "usage_count": style.get("usage_count", 0),
             }
         )
 
