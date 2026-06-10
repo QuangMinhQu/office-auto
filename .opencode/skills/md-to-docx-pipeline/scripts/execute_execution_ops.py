@@ -346,6 +346,70 @@ def execute_set_page_layout(operation: dict, document_path: Path) -> str:
     return "page_layout"
 
 
+def execute_insert_image(operation: dict, current_anchor: str, document_path: Path) -> str:
+    """Mechanically insert image after anchor with optional caption.
+
+    Op schema:
+    {
+      "op": "insert_image",
+      "anchor": "/body/p[@paraId=XXXX]",
+      "image_path": "/absolute/path/to/image.png",
+      "width_cm": 14.0,
+      "caption": "Hình 1.2. Mô tả hình",
+      "caption_style": "Caption"
+    }
+    """
+    from pathlib import Path as _Path
+
+    image_path = operation.get("image_path")
+    if not image_path or not _Path(image_path).exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
+
+    width_cm = operation.get("width_cm", 14.0)
+    caption_text = str(operation.get("caption") or "")
+
+    # Insert image paragraph after anchor
+    props: dict[str, str] = {
+        "image_path": str(image_path),
+        "width_cm": str(width_cm),
+    }
+    result = officecli_add(
+        document_path,
+        "/body",
+        element_type="image",
+        props=props,
+        after=current_anchor,
+    )
+
+    if isinstance(result, str):
+        new_path = result
+    elif isinstance(result, dict):
+        new_path = result.get("path", "") or str(result.get("data", ""))
+        new_path = new_path or current_anchor
+    else:
+        new_path = current_anchor
+
+    # Insert caption if provided
+    if caption_text:
+        caption_style = str(operation.get("caption_style") or "Caption")
+        try:
+            cap_result = officecli_add(
+                document_path,
+                "/body",
+                element_type="paragraph",
+                props={"style": caption_style, "text": caption_text},
+                after=new_path,
+            )
+            if isinstance(cap_result, str):
+                new_path = cap_result
+            elif isinstance(cap_result, dict):
+                new_path = cap_result.get("path", "") or new_path
+        except Exception:
+            pass  # Caption is optional
+
+    return str(new_path)
+
+
 def resolve_idx_anchor(anchor_str: str, doc) -> str | None:
     """Resolve IDX_XXXXX synthetic anchor → OfficeCLI path.
 
@@ -453,6 +517,7 @@ def execute_ops_batch(
         "removed_count": 0,
         "inserted_paragraphs": 0,
         "inserted_tables": 0,
+        "inserted_images": 0,
         "updated_texts": 0,
         "page_layout_changes": 0,
         "inserted_paths": [],
@@ -504,7 +569,7 @@ def execute_ops_batch(
 
         report["removed_count"] = remove_count
 
-        # Second pass: execute inserts (paragraphs, tables)
+        # Second pass: execute inserts (paragraphs, tables, images)
         insert_ops = [
             op for op in ops
             if op.get("op") in (
@@ -512,6 +577,7 @@ def execute_ops_batch(
                 "insert_paragraph_before",
                 "insert_table_after",
                 "insert_table",
+                "insert_image",
             )
         ]
 
@@ -597,6 +663,26 @@ def execute_ops_batch(
                 except OfficeCliError as exc:
                     report["failed"] += 1
                     report["errors"].append({"op": "insert_table", "path": str(anchor), "error": str(exc)})
+                    if fail_fast:
+                        officecli_save(session)
+                        raise
+
+            elif op_name == "insert_image":
+                # Flush buffer
+                if batchable_buffer:
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                    batchable_buffer.clear()
+                    batchable_count = 0
+
+                anchor = resolve_anchor(op, current_anchor, range_info)
+                try:
+                    new_path = execute_insert_image(op, anchor, session)
+                    current_anchor = new_path or anchor
+                    report["inserted_paths"].append(new_path)
+                    report["succeeded"] += 1
+                except Exception as exc:
+                    report["failed"] += 1
+                    report["errors"].append({"op": "insert_image", "path": str(anchor), "error": str(exc)})
                     if fail_fast:
                         officecli_save(session)
                         raise
@@ -779,13 +865,21 @@ def main() -> None:
     report["target_file"] = str(target_path)
     report["prototype_roles_count"] = len(prototype_roles)
 
-    # Write report
+    # Write report — merge with existing run.json to preserve target_file set by pipeline.ts
     report_path = run_dir / "execute_ops_report.json"
     write_json(report_path, report)
-    write_json(run_dir / "run.json", {
+    existing = read_json(run_dir / "run.json") if (run_dir / "run.json").exists() else {}
+    existing.update({
         "status": "failed" if report["failed"] > 0 else "built",
-        "artifacts": {"execute_ops_report": str(report_path)},
+        "target_file": str(target_path),
+        "template_file": str(template_file) if template_file else existing.get("template_file", ""),
+        "artifacts": {
+            **existing.get("artifacts", {}),
+            "execute_ops_report": str(report_path),
+            "target_file": str(target_path),
+        },
     })
+    write_json(run_dir / "run.json", existing)
 
     status = "completed" if report["failed"] == 0 else "partial"
     print(f"[execute_execution_ops] {status}: {report['succeeded']} succeeded, "

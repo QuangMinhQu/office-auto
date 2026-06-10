@@ -410,8 +410,21 @@ def main() -> None:
     outline_payload = read_json(run_dir / "content_outline.json") if (run_dir / "content_outline.json").exists() else {"outline": []}
     source_render_window = (plan.get("semantic_grounding") or {}).get("source_render_window") or {}
 
-    target_file = Path(run_state.get("target_file"))
-    target_exists = target_file.exists()
+    def _resolve_target_file(run_state: dict, build_report: dict) -> Path | None:
+        candidates = [
+            run_state.get("target_file"),
+            build_report.get("target_file"),
+            run_state.get("artifacts", {}).get("target_file"),
+        ]
+        for c in candidates:
+            if c and str(c).strip() not in ("", "None", "null"):
+                p = Path(str(c))
+                if p.exists():
+                    return p
+        return None
+
+    target_file = _resolve_target_file(run_state, build_report)
+    target_exists = target_file is not None and target_file.exists()
     officecli_version = ensure_officecli_available() if target_exists else None
     styles_tree = officecli_get(target_file, "/styles", depth=1) if target_exists else {}
     section_results = officecli_query(target_file, "section") if target_exists else []
@@ -528,6 +541,9 @@ def main() -> None:
     semantic_roundtrip_ok = roundtrip_report.get("status") == "passed"
     format_fidelity_ok = not format_fidelity.get("hard_fail", False)
 
+    import shutil as _shutil
+    lo_available_q = bool(_shutil.which("soffice") or _shutil.which("libreoffice"))
+
     qa_report = {
         "status": "passed" if all([
             required_parts_present,
@@ -572,6 +588,7 @@ def main() -> None:
             "section_breaks": scaffold_checks["section_breaks"],
         },
         "toc_refresh_strategy": build_report.get("field_refresh_strategy", "rendered-in-package"),
+        "toc_refresh_available": lo_available_q,
         "update_fields_on_open": update_fields_enabled,
         "dirty_field_count": dirty_field_count,
         "bookmark_count": len(bookmarks),

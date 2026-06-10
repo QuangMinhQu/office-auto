@@ -49,25 +49,39 @@ server.registerTool(
       }
     }
 
+    const rawAnchor = contentMap?.recommended_insert_anchor
+      || stylesForLlm?.recommended_anchor
+      || inspection?.content_map?.recommended_insert_anchor
+      || null;
+    const bodyPlaceholders = contentMap?.body_placeholders || inspection?.content_map?.body_placeholders || {};
+    const bodyParaIds: string[] = Array.isArray(bodyPlaceholders.para_ids) ? bodyPlaceholders.para_ids : [];
+    const frontMatterBlock = contentMap?.front_matter || inspection?.content_map?.front_matter || {};
+
     const scaffold = {
       run_dir: absRunDir,
       source_file: contentFile || null,
-      recommended_anchor:
-        contentMap?.recommended_insert_anchor ||
-        stylesForLlm?.recommended_anchor ||
-        inspection?.content_map?.recommended_insert_anchor ||
-        null,
-      CRITICAL_FIRST_OP_ANCHOR:
-        contentMap?.recommended_insert_anchor ||
-        stylesForLlm?.recommended_anchor ||
-        inspection?.content_map?.recommended_insert_anchor ||
-        null,
+      recommended_anchor: rawAnchor
+        ? `/body/p[@paraId=${rawAnchor}]`
+        : null,
+      CRITICAL_FIRST_OP_ANCHOR: rawAnchor
+        ? `/body/p[@paraId=${rawAnchor}]`
+        : null,
+      anchor_format_note: "CRITICAL: anchor MUST be /body/p[@paraId=XXXX] format. Never use raw hex.",
+      toc_last_para_id: inspection?.front_matter_boundary?.last_para_id || null,
+      front_matter_last_para_id: inspection?.front_matter_boundary?.last_para_id || null,
       body_text_style: stylesForLlm?.body_text_style || inspection?.styles_for_llm?.body_text_style || null,
       heading_map: stylesForLlm?.heading_map || inspection?.styles_for_llm?.heading_map || {},
-      available_styles: stylesForLlm?.available_styles || inspection?.styles_for_llm?.available_styles || [],
+      available_styles: (stylesForLlm?.available_styles || inspection?.styles_for_llm?.available_styles || [])
+        .slice(0, 15)
+        .map((s: any) => ({ name: s.name, style_id: s.style_id, use_for: s.use_for })),
       do_not_use_styles: stylesForLlm?.do_not_use_styles || inspection?.styles_for_llm?.do_not_use_styles || [],
-      front_matter: contentMap?.front_matter || inspection?.content_map?.front_matter || {},
-      body_placeholders: contentMap?.body_placeholders || inspection?.content_map?.body_placeholders || {},
+      front_matter: frontMatterBlock,
+      body_placeholders: {
+        para_ids: bodyParaIds.slice(0, 50),
+        description: bodyPlaceholders.description || "",
+        total_count: bodyParaIds.length,
+      },
+      placeholder_note: "Only first 50 body placeholders shown. Full list in docx_inspect_content_map.json",
       markdown_headings: headings,
       markdown_heading_count: headings.length,
       paragraph_count: Array.isArray(inspection?.paragraph_sample) ? inspection.paragraph_sample.length : 0,

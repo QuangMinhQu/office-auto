@@ -601,12 +601,16 @@ def dump_toc_entries(template_path: Path) -> list[dict]:
     return toc_entries
 
 
-def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
+def detect_front_matter_boundary(doc: Any, *, min_body_text_len: int = 30,
+                                   confirmation_window: int = 3) -> dict[str, Any]:
     """Layer 5: Detect front matter boundary by scanning FULL document.
 
-    Front matter = all paragraphs before the first body paragraph.
+    Improved: requires N consecutive body-like paragraphs before committing
+    to body_start, preventing early detection on short placeholder text.
+
+    Front matter = all paragraphs before the first confirmed body paragraph.
     Body paragraphs are: not a heading, not a TOC entry, not a figure/table list,
-    and have substantial text (>20 chars) in a body style.
+    and have substantial text (>min_body_text_len chars) in a body style.
 
     TOC-style paragraphs (style name starting with 'toc') are ALWAYS front matter —
     this is an XML fact from document.xml, not a heuristic.
@@ -620,7 +624,9 @@ def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
     FRONT_MATTER_STYLE_PREFIXES = ("toc ", "toc", "table of figures", "table of authorities")
     debug_log: list[dict] = []
 
+    body_candidates: list[int] = []
     body_start_index = len(doc.paragraphs)
+
     for i, para in enumerate(doc.paragraphs):
         style_name = (para.style.name or "").lower()
         text = para.text.strip()
@@ -651,12 +657,32 @@ def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
 
         # Skip TOC-style paragraphs — they are front matter, not body
         if is_toc_style:
+            body_candidates = []  # reset on TOC paragraph
             continue
 
-        if not is_heading and len(text) > 20:
-            body_start_index = i
-            debug_log[-1]["action"] = "BODY_START_DETECTED"
-            break
+        # Check if this is a body candidate
+        is_long_body = len(text) >= min_body_text_len and not is_heading
+
+        if is_long_body:
+            body_candidates.append(i)
+            # Only commit if confirmation_window consecutive body paras found
+            if len(body_candidates) >= confirmation_window:
+                body_start_index = body_candidates[0]
+                debug_log[-1]["action"] = f"BODY_START_CONFIRMED (window={confirmation_window})"
+                break
+        else:
+            # Reset on non-body paragraph (heading, short text, empty)
+            if not is_heading and len(text) > 0:
+                # Short non-heading text — could be a caption or transitional
+                # Don't reset, treat as part of body candidate chain
+                pass
+            else:
+                body_candidates = []  # reset on heading or empty
+
+    # Fallback if no confirmed window found
+    if body_start_index == len(doc.paragraphs) and body_candidates:
+        body_start_index = body_candidates[0]
+        debug_log[-1]["action"] = "BODY_START_FALLBACK (window not met)"
 
     # Log TOC-style paragraphs found during scan for boundary audit
     toc_style_indices = [e["index"] for e in debug_log if e.get("is_toc_style")]
@@ -664,20 +690,23 @@ def detect_front_matter_boundary(doc: Any) -> dict[str, Any]:
         print(f"[docx_inspect] front_matter_boundary: TOC-style paras at indices {toc_style_indices}, body_start_index={body_start_index}")
 
     # Last paraId before body
-    if body_start_index > 0:
+    last_para_id = None
+    if body_start_index > 0 and body_start_index < len(doc.paragraphs):
         last_before_body = doc.paragraphs[body_start_index - 1]
         last_para_id = get_para_id(last_before_body)
-        return {
-            "last_para_id": last_para_id,
-            "body_start_index": body_start_index,
-            "description": f"body starts at para index {body_start_index} (full scan, {len(doc.paragraphs)} total, {len(toc_style_indices)} TOC-style skipped)",
-            "debug_log": debug_log,
-        }
+    elif body_start_index >= len(doc.paragraphs):
+        # Entire doc is front matter
+        if len(doc.paragraphs) > 0:
+            last_para_id = get_para_id(doc.paragraphs[-1])
 
     return {
-        "last_para_id": None,
+        "last_para_id": last_para_id,
         "body_start_index": body_start_index,
-        "description": "no boundary detected — entire doc may be front matter",
+        "description": (
+            f"body starts at para index {body_start_index} "
+            f"(full scan, {len(doc.paragraphs)} total, {len(toc_style_indices)} TOC-style skipped, "
+            f"window={confirmation_window}, min_body_text_len={min_body_text_len})"
+        ),
         "debug_log": debug_log,
     }
 

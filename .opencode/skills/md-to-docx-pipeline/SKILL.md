@@ -53,6 +53,14 @@ Các primitive này duoc expose qua ca `.opencode/tools/docx_pipeline.ts` lan `m
 Đọc `markdown_headings` từ source + `toc_entries_raw`. Xác định academic/legal/etc.
 **KHÔNG đọc toàn bộ noidung.md** — chỉ cần heading structure để classify.
 
+#### Verify heading levels (Issue #6 fix)
+Trước khi map markdown → Word styles, kiểm tra:
+- `# 1.4.` → Có thể là lỗi trong noidung.md. Nếu numbering depth = 2 (1.x) thì
+  đây phải là `## 1.4.`, không phải `# 1.4.`
+- Luôn ưu tiên số lượng `#` ký tự trong markdown, KHÔNG suy luận từ numbering prefix.
+- Nếu số `#` và numbering depth mâu thuẫn, flag "heading_level_warning" và chọn
+  theo `#` count (source of truth).
+
 ### Bước 4 — Map markdown → Word styles
 - `# heading` → `Heading 1` (outline_level_xml: 0)
 - `## heading` → `Heading 2` (outline_level_xml: 1)
@@ -145,6 +153,19 @@ Mỗi op phải có field `role` để executor/validator phân biệt heading v
 }
 ```
 
+#### Remove Ops Completeness Self-Check
+Trước khi finalize execution_ops.json, đếm:
+- `body_placeholder_count` = số entries trong all_para_ids có `is_front_matter: false`
+- `remove_op_count` = số ops có `"op": "remove"` trong file
+- Nếu `remove_op_count < body_placeholder_count * 0.8` → PHẢI review lại,
+  có khả năng đang thiếu remove ops.
+
+#### TOC Refresh Protocol
+Sau khi apply ops, TOC field cần được refresh. Có 3 chiến lược:
+1. **LibreOffice headless** (preferred): `docx_refresh_fields.py --strategy libreoffice`
+2. **mark_dirty** (fallback): `docx_refresh_fields.py --strategy mark_dirty` — đánh dấu fields dirty để Word tự refresh khi mở
+3. **OfficeCLI refresh** (optional): nếu OfficeCLI hỗ trợ
+
 ### Supported ops
 | Op | Params |
 |---|---|
@@ -154,6 +175,7 @@ Mỗi op phải có field `role` để executor/validator phân biệt heading v
 | `update_text` | `path`, `text`, `run_props` |
 | `insert_table` | `anchor`, `rows`, `col_widths`, `style` |
 | `set_page_layout` | `margins`, `paper_size`, `orientation` |
+| `insert_image` | `anchor`, `image_path`, `width_cm`, `caption`, `caption_style` |
 
 ## Contract scripts
 

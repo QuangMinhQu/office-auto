@@ -1,3 +1,14 @@
+/**
+ * DEPRECATED — This opencode plugin is dead code. The real execution path is:
+ *   MCP server (mcp/office-auto-server.ts) → LLM calls Python scripts directly via bash.
+ *
+ * All pipeline tools (inspectTemplate, validateExecutionOps, applyExecutionOps,
+ * reviewOutput, readResult, runPipeline) below are NOT in the execution path.
+ * They are kept only for reference. Do NOT use them.
+ *
+ * See deprecated_plan.md for details.
+ */
+
 import { tool } from "@opencode-ai/plugin"
 import {
   fileExists,
@@ -9,6 +20,7 @@ import {
   type ScriptStep,
 } from "../../mcp/pipeline-core"
 
+/** @deprecated Use docx_inspect.py directly via bash */
 export const inspectTemplate = tool({
   // @ts-expect-error title is spec 2025-11-25, not yet in opencode plugin types
   title: "DOCX Template Inspector",
@@ -79,8 +91,17 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
       status: "completed",
       template_file: absTplFile,
       run_dir: absRunDir,
-      recommended_anchor: payload.content_map?.recommended_insert_anchor || payload.styles_for_llm?.recommended_anchor || null,
-      CRITICAL_FIRST_OP_ANCHOR: payload.content_map?.recommended_insert_anchor || payload.styles_for_llm?.recommended_anchor || null,
+      recommended_anchor: payload.content_map?.recommended_insert_anchor
+        ? `/body/p[@paraId=${payload.content_map.recommended_insert_anchor}]`
+        : (payload.styles_for_llm?.recommended_anchor || null),
+      CRITICAL_FIRST_OP_ANCHOR: payload.content_map?.recommended_insert_anchor
+        ? `/body/p[@paraId=${payload.content_map.recommended_insert_anchor}]`
+        : (payload.styles_for_llm?.recommended_anchor || null),
+      anchor_format_note: "CRITICAL: anchor MUST be /body/p[@paraId=XXXX] format. Never use raw hex.",
+      toc_last_para_id: (payload.toc_entries_raw || []).length > 0
+        ? (payload.toc_entries_raw[payload.toc_entries_raw.length - 1]?.para_id || null)
+        : null,
+      front_matter_last_para_id: payload.front_matter_boundary?.last_para_id || null,
       body_text_style: payload.styles_for_llm?.body_text_style || null,
       heading_map: payload.styles_for_llm?.heading_map || {},
       do_not_use_styles: payload.styles_for_llm?.do_not_use_styles || [],
@@ -90,11 +111,33 @@ ANNOTATIONS: read-only, idempotent, local filesystem only.`,
         style_id: s.style_id,
         use_for: s.use_for
       })),
-      placeholders: (payload.all_para_ids || []).map((p: any) => ({
-        paraId: p.para_id,
-        text_preview: p.text_preview,
-        is_front_matter: !!p.is_front_matter,
-      }))
+      placeholders: (() => {
+        const allParaIds = payload.all_para_ids || [];
+        const frontMatterBoundaryParas = allParaIds
+          .filter((p: any) => p.is_front_matter)
+          .slice(-5);
+        const bodyPlaceholders = allParaIds
+          .filter((p: any) => !p.is_front_matter)
+          .slice(0, 50);
+        return [...frontMatterBoundaryParas, ...bodyPlaceholders].map((p: any) => ({
+          paraId: p.para_id,
+          text_preview: p.text_preview,
+          is_front_matter: !!p.is_front_matter,
+        }));
+      })(),
+      placeholder_count: (payload.all_para_ids || []).length,
+      placeholder_note: "Only boundary front-matter paras (last 5) and body placeholders (first 50) shown. Full list in docx_inspect_all_para_ids.json",
+      anchor_candidates: (() => {
+        const allParaIds = payload.all_para_ids || [];
+        return allParaIds
+          .filter((p: any) => p.is_front_matter)
+          .slice(-10)
+          .map((p: any) => ({
+            paraId: `/body/p[@paraId=${p.para_id}]`,
+            text_preview: p.text_preview,
+            is_toc: ((p.text_preview || "").length < 5 || ((p.style_name || "").toLowerCase().includes("toc"))),
+          }));
+      })(),
     } : null;
 
     return JSON.stringify(
@@ -283,8 +326,17 @@ ANNOTATIONS: writes output DOCX, non-idempotent.`,
     }
     // ops_only: skip inspect entirely
 
+    // Pre-write target_file and template_file to run.json BEFORE executor runs
+    const runJsonPath = `${absRunDir}/run.json`
+    const existingRunJson = await readJsonFile(runJsonPath).catch(() => ({}))
+    await writeJsonFile(runJsonPath, {
+      ...existingRunJson,
+      target_file: absTargetFile,
+      template_file: absTplFile,
+    })
+
     // Single executor script handles compile + build + post_process
-    steps.push(["execute_execution_ops.py", ["--run-dir", absRunDir]])
+    steps.push(["execute_execution_ops.py", ["--run-dir", absRunDir, "--template-file", absTplFile, "--target-file", absTargetFile]])
 
     const result = await runSteps(steps, context.worktree)
     const buildReport = await readJsonFile(`${absRunDir}/build_report.json`)
@@ -588,8 +640,17 @@ ANNOTATIONS: writes output artifacts, non-idempotent.`,
           }
         }
 
+        // Pre-write target_file and template_file to run.json BEFORE executor runs
+        const applyRunJsonPath = `${absRunDir}/run.json`
+        const applyExistingRunJson = await readJsonFile(applyRunJsonPath).catch(() => ({}))
+        await writeJsonFile(applyRunJsonPath, {
+          ...applyExistingRunJson,
+          target_file: absTargetFile,
+          template_file: absTplFile,
+        })
+
         // Single executor script handles compile + build + post_process
-        applySteps.push(["execute_execution_ops.py", ["--run-dir", absRunDir]])
+        applySteps.push(["execute_execution_ops.py", ["--run-dir", absRunDir, "--template-file", absTplFile, "--target-file", absTargetFile]])
 
         const applyResult = await runSteps(applySteps, context.worktree)
         phasesStatus["apply"] = { status: applyResult.status, script: applyResult.failed_step || "execute_execution_ops.py", exitCode: applyResult.results[applyResult.results.length - 1]?.exitCode ?? 0 }

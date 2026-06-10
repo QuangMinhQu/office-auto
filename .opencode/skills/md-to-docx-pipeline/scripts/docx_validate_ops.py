@@ -43,6 +43,7 @@ SUPPORTED_OPS = {
     "insert_table",
     "insert_table_after",
     "set_page_layout",
+    "insert_image",
 }
 
 
@@ -467,6 +468,191 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
                     "message": "set_page_layout op không có margins, paper_size, hoặc orientation.",
                     "severity": "medium",
                 })
+
+        elif op_name == "insert_image":
+            anchor = operation.get("anchor")
+            if not anchor:
+                warnings.append({
+                    "op_index": index,
+                    "type": "missing_anchor",
+                    "message": "insert_image op thiếu 'anchor'.",
+                    "severity": "high",
+                })
+            else:
+                resolved, is_valid = resolve_anchor_for_op(operation, known_paths, known_para_ids, has_synthetic)
+                if not is_valid:
+                    warnings.append({
+                        "op_index": index,
+                        "type": "unknown_anchor",
+                        "message": f"insert_image anchor `{resolved}` không tìm thấy trong template.",
+                        "severity": "high",
+                    })
+            image_path = operation.get("image_path")
+            if not image_path:
+                warnings.append({
+                    "op_index": index,
+                    "type": "missing_image_path",
+                    "message": "insert_image op thiếu 'image_path'.",
+                    "severity": "high",
+                })
+
+    # ---- Completeness checks (warn-only, run after per-op validation) ----
+    completeness_warnings = _check_required_remove_ops(ops, template_inspection, para_meta_index, known_para_ids, front_matter_para_ids)
+    if completeness_warnings:
+        warnings.extend(completeness_warnings)
+
+    orphan_media_warnings = _check_orphan_media(ops, template_inspection, para_meta_index, front_matter_para_ids)
+    if orphan_media_warnings:
+        warnings.extend(orphan_media_warnings)
+
+    heading_warnings = _check_heading_level_consistency(ops)
+    if heading_warnings:
+        warnings.extend(heading_warnings)
+
+    return warnings
+
+
+def _check_required_remove_ops(
+    ops: list[dict],
+    template_inspection: dict,
+    para_meta_index: dict,
+    known_para_ids: set[str],
+    front_matter_para_ids: set[str],
+) -> list[dict]:
+    """CRITICAL: Validate that body_placeholder paraIds have corresponding remove ops.
+
+    Absence of required remove ops is HIGH severity - template content cũ sẽ bị giữ lại.
+    """
+    all_para_ids = template_inspection.get("all_para_ids", [])
+    body_placeholder_ids = {
+        entry["para_id"]
+        for entry in all_para_ids
+        if not entry.get("is_front_matter") and entry.get("para_id")
+        and str(entry.get("para_id")) not in front_matter_para_ids
+    }
+
+    removed_ids: set[str] = set()
+    for op in ops:
+        if op.get("op") == "remove":
+            path = str(op.get("path", ""))
+            if path.startswith("/body/p[@paraId="):
+                para_id = path.split("@paraId=")[1].rstrip("]")
+                removed_ids.add(para_id)
+
+    missing_removes = body_placeholder_ids - removed_ids
+    if not missing_removes:
+        return []
+
+    significant_missing = [
+        pid for pid in missing_removes
+        if (para_meta_index.get(str(pid), {}).get("text_preview") or "").strip()
+    ]
+
+    warnings: list[dict] = []
+    if significant_missing:
+        warnings.append({
+            "op_index": 0,
+            "type": "missing_required_removes",
+            "severity": "high",
+            "code": "MISSING_REMOVE_OPS",
+            "message": (
+                f"CRITICAL: {len(significant_missing)} body placeholder paragraphs "
+                f"không có remove op. Template content cũ sẽ bị giữ lại. "
+                f"Thêm remove ops cho các paraId sau: {significant_missing[:10]}"
+                f"{'...' if len(significant_missing) > 10 else ''}"
+            ),
+            "missing_para_ids": significant_missing[:20],
+            "total_body_placeholders": len(body_placeholder_ids),
+            "total_removed": len(removed_ids),
+            "remove_op_count": len([op for op in ops if op.get("op") == "remove"]),
+            "body_placeholder_count": len(body_placeholder_ids),
+            "completeness_pct": round(len(removed_ids) / max(len(body_placeholder_ids), 1) * 100, 1),
+        })
+
+    return warnings
+
+
+def _check_orphan_media(
+    ops: list[dict],
+    template_inspection: dict,
+    para_meta_index: dict,
+    front_matter_para_ids: set[str],
+) -> list[dict]:
+    """Warn if body placeholder paragraphs contain empty text but no remove op.
+
+    Empty-text paragraphs in body zone are likely image/object placeholders
+    that will remain in output if not removed.
+    """
+    removed_ids = {
+        str(op.get("path", "")).split("@paraId=")[1].rstrip("]")
+        for op in ops if op.get("op") == "remove" and "@paraId=" in str(op.get("path", ""))
+    }
+
+    warnings: list[dict] = []
+    for entry in template_inspection.get("all_para_ids", []):
+        if entry.get("is_front_matter"):
+            continue
+        pid = str(entry.get("para_id", ""))
+        if pid in front_matter_para_ids:
+            continue
+        text = (entry.get("text_preview") or "").strip()
+        if not text and pid not in removed_ids:
+            warnings.append({
+                "op_index": 0,
+                "type": "possible_orphan_image",
+                "severity": "medium",
+                "code": "ORPHAN_MEDIA",
+                "message": (
+                    f"Paragraph {pid} trong body zone có text rỗng nhưng không có remove op. "
+                    f"Nếu đây là image placeholder, thêm remove op."
+                ),
+                "para_id": pid,
+            })
+
+    return warnings
+
+
+def _check_heading_level_consistency(ops: list[dict]) -> list[dict]:
+    """Check if numeric heading prefix is consistent with assigned heading level.
+
+    E.g., '# 1.4.' in markdown has depth 1 but semantic numbering 1.4 = depth 2.
+    The source markdown `#` count is the source of truth.
+    """
+    import re
+
+    warnings: list[dict] = []
+    for i, op in enumerate(ops):
+        role = str(op.get("role") or "")
+        text = str(op.get("text") or "")
+        style = str(op.get("style") or "")
+
+        if role not in ("h1", "h2", "h3"):
+            continue
+
+        m = re.match(r'^(\d+(?:\.\d+)*)\.?\s+', text)
+        if not m:
+            continue
+
+        numeric_depth = len(m.group(1).split('.'))
+        expected_level = int(role[1])
+
+        if numeric_depth != expected_level:
+            warnings.append({
+                "op_index": i + 1,
+                "type": "heading_level_mismatch",
+                "severity": "medium",
+                "code": "HEADING_LEVEL_MISMATCH",
+                "message": (
+                    f"Heading '{text[:60]}' có numeric prefix depth={numeric_depth} "
+                    f"nhưng role='{role}' (level {expected_level}). "
+                    f"Số lượng # trong markdown là source of truth, KHÔNG dùng numbering prefix để suy luận level."
+                ),
+                "suggested_fix": (
+                    {"role": f"h{numeric_depth}", "style": f"Heading{numeric_depth}"}
+                    if numeric_depth <= 3
+                    else {"note": f"numeric_depth={numeric_depth} > 3, giữ nguyên {role}"}
+                ),
+            })
 
     return warnings
 

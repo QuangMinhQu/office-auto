@@ -524,8 +524,21 @@ def main() -> None:
     template_profile = read_json(run_dir / "template_profile.json") if (run_dir / "template_profile.json").exists() else {}
     preparation_report = read_json(run_dir / "template_preparation_report.json") if (run_dir / "template_preparation_report.json").exists() else {}
 
-    target_file = Path(run_state.get("target_file") or plan.get("target_file") or build_report.get("target_file") or legacy_build_report.get("target_file") or "")
-    if not target_file.exists():
+    def _safe_resolve_target(*candidates: Any) -> Path | None:
+        for c in candidates:
+            if c and str(c).strip() not in ("", "None", "null"):
+                p = Path(str(c))
+                if p.exists():
+                    return p
+        return None
+
+    target_file = _safe_resolve_target(
+        run_state.get("target_file"),
+        build_report.get("target_file"),
+        legacy_build_report.get("target_file"),
+        plan.get("target_file"),
+    )
+    if target_file is None or not target_file.exists():
         review_report = {
             "status": "blocked",
             "message": "Không thể review vì target_file chưa tồn tại.",
