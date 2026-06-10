@@ -9,18 +9,24 @@
 
 - **Agent chính:** `orchestrator` — nắm toàn bộ state, scaffold_summary, source_content.
 - **Nguyên tắc context economy:** Orchestrator distill data, truyền inline vào subagent prompt. Subagents KHÔNG tự đọc file hệ thống nặng (docx_inspect_output.json, source markdown).
-- **Không gọi trực tiếp** OfficeCLI MCP tools; luôn ưu tiên custom tools trong `.opencode/tools`.
+- **Không gọi trực tiếp** OfficeCLI MCP tools; luôn ưu tiên MCP tools trong `mcp/tools/*.ts`.
 - **Không đọc** artifact trong `.office-auto/state/<run_id>/` nếu chưa xác định chính xác `run_id`.
-- MCP schema (`.opencode/tools/docx_pipeline.ts`) là source of truth cho tool call order và preconditions.
+- MCP server (`mcp/office-auto-server.ts` · `mcp/tools/*.ts`) là source of truth cho tool call order và preconditions.
 
 ## Available Tools
 
-- `inspectTemplate` - inspect DOCX template → dùng bởi **inspector** subagent
-- `validateExecutionOps` - validate `execution_ops.json` → dùng bởi **validator** subagent
-- `applyExecutionOps` - apply ops, luôn dùng `mode="ops_only"` → dùng bởi **applier** subagent
-- `reviewOutput` - semantic review → dùng bởi **reviewer** subagent
-- `readResult` - verify output → dùng bởi **reviewer** subagent
-- `runPipeline` - composite tool, KHÔNG dùng trong normal flow
+| MCP Tool | File | Dùng bởi |
+|---|---|---|
+| `inspectTemplate` | `mcp/tools/inspect.ts` | **inspector** subagent |
+| `prepareInsertPlan` | `mcp/tools/scaffold.ts` | **orchestrator** (sau inspect, trước Planner) |
+| `validateOps` | `mcp/tools/validate.ts` | **validator** subagent |
+| `applyOps` | `mcp/tools/execute.ts` | **applier** subagent |
+| `runQA` | `mcp/tools/qa.ts` | **reviewer** subagent (hard final gate) |
+| `reviewOutput` | `mcp/tools/review.ts` | **reviewer** subagent |
+| `refreshFields` | `mcp/tools/refresh.ts` | **orchestrator** (sau review passed) |
+| `runFullPipeline` | `mcp/tools/orchestrator.ts` | **KHÔNG dùng trong normal flow** |
+
+> **Note**: `.opencode/tools/docx_pipeline.ts` đã bị xóa. MCP server (`mcp/tools/*.ts`) là execution path duy nhất.
 
 ## Cấu trúc Topology của Tác nhân (Agent Topology)
 
@@ -47,7 +53,7 @@ Các tác nhân phụ hoạt động dưới sự giám sát chặt chẽ của 
 | **Planner** | Nhận dữ liệu inline, tạo `execution_ops` | 0 |
 | **Validator** | Xác thực `execution_ops` (Pass/Warn/Fail) | 1 |
 | **Applier** | Thực thi `execution_ops` để tạo kết quả | 1 |
-| **Reviewer** | Đọc kết quả và đánh giá (Verdict) | 2 |
+| **Reviewer** | Đọc kết quả và đánh giá (Verdict) | 1 |
 
 ---
 

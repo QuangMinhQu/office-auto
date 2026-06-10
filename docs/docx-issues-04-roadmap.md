@@ -11,7 +11,7 @@ Workspace này phải đi đến trạng thái: người dùng ném vào nội d
 3. Wrapper `scripts/build_report.py` đã là entrypoint chuẩn để agent/human đi qua cùng một contract.
 4. `roundtrip_pandoc.py` + `qa_docx.py` là gate xác minh chính thức trước bàn giao.
 5. `review_docx.py` là lớp screen review chính thức sau QA.
-6. Workspace đã có `.opencode/AGENTS.md`, `task.md`, `.vscode/mcp.json`, `.vscode/tasks.json`, `.opencode/tools/docx_pipeline.ts` và helper `scripts/latest_review_artifacts.py` để prompt ngắn vẫn đi đúng flow.
+6. Workspace đã có `.opencode/AGENTS.md`, `task.md`, `.vscode/mcp.json`, `.vscode/tasks.json`, `mcp/tools/*.ts` và helper `scripts/latest_review_artifacts.py` để prompt ngắn vẫn đi đúng flow.
 
 ## End-state architecture
 
@@ -22,7 +22,7 @@ Workspace này phải đi đến trạng thái: người dùng ném vào nội d
 5. Post-process layer: `post_process_docx.py` xử lý các XML/package transforms nhỏ không nên trộn vào builder.
 6. QA layer: structural QA + semantic roundtrip + issue summary, không finalize chỉ vì file “mở được”.
 7. Review layer: `review_docx.py` soi drift trình bày sau QA và tạo artifact để người vận hành nhìn nhanh hơn JSON thuần.
-8. Workspace automation layer: prompt ngắn vẫn route đúng nhờ `AGENTS.md`, `task.md`, plugin tools, tasks và helper summary.
+8. Workspace automation layer: prompt ngắn vẫn route đúng nhờ `AGENTS.md`, `task.md`, MCP tools, tasks và helper summary.
 
 ## Thứ tự ưu tiên kỹ thuật
 

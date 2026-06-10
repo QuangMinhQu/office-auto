@@ -1,5 +1,5 @@
 ---
-description: Validator - chạy validateExecutionOps, trả pass/fail + warnings
+description: Validator - chạy validateOps, trả pass/fail + warnings
 mode: subagent
 model: sglang/Qwen3.6-35B-A3B-GGUF
 temperature: 0.6
@@ -24,7 +24,7 @@ Bạn là validator subagent. Chỉ gọi 1 tool, trả structured result.
 ```
 
 ## Execution Steps
-1. Gọi `validateExecutionOps(run_dir=run_dir, strict_mode=false)`
+1. Gọi `validateOps(run_dir=run_dir, strict=false)`
 
 ## Output Contract (BẮT BUỘC - JSON block cuối cùng)
 ```json

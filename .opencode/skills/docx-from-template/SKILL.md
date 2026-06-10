@@ -40,10 +40,10 @@ Skill này có 2 mode chạy, tùy vào môi trường:
 2. Đọc trực tiếp markdown nguồn bằng file read.
 3. Tự suy luận replace range, style map, anchors, bookmarks, TOC intent.
 4. Tự viết `.office-auto/state/<run_id>/execution_ops.json`.
-5. Gọi `validateExecutionOps`.
+5. Gọi `validateOps`.
 6. Nếu có warnings, sửa `execution_ops.json` rồi validate lại.
-7. Gọi `applyExecutionOps` với `mode="ops_only"`.
-8. Gọi `readResult`.
+7. Gọi `applyOps`.
+8. Gọi `reviewOutput`.
 9. So output readback với markdown nguồn và template intent; nếu chưa đúng thì sửa ops và apply lại.
 
 ## Invariants

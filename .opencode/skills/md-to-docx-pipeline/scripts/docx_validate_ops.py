@@ -509,6 +509,22 @@ def validate_ops_payload(ops_payload: dict, template_inspection: dict) -> list[d
     if heading_warnings:
         warnings.extend(heading_warnings)
 
+    source_coverage_warnings = _check_source_coverage(ops, template_inspection)
+    if source_coverage_warnings:
+        warnings.extend(source_coverage_warnings)
+
+    reference_warnings = _check_reference_section(ops)
+    if reference_warnings:
+        warnings.extend(reference_warnings)
+
+    anchor_safety_warnings = _check_anchor_safety(ops, template_inspection)
+    if anchor_safety_warnings:
+        warnings.extend(anchor_safety_warnings)
+
+    truncated_text_warnings = _check_truncated_text(ops)
+    if truncated_text_warnings:
+        warnings.extend(truncated_text_warnings)
+
     return warnings
 
 
@@ -657,6 +673,272 @@ def _check_heading_level_consistency(ops: list[dict]) -> list[dict]:
     return warnings
 
 
+def _check_source_coverage(
+    ops: list[dict],
+    template_inspection: dict,
+) -> list[dict]:
+    """Check that heading ops and body ops cover the source content proportionally.
+
+    Compares heading op count against available body_placeholders to detect
+    severe under-generation (e.g., 17 ops instead of ~47 expected).
+    """
+    warnings: list[dict] = []
+
+    heading_ops = [op for op in ops if op.get("role") in ("h1", "h2", "h3")]
+    body_ops = [op for op in ops if op.get("role") == "body"]
+    remove_ops = [op for op in ops if op.get("op") == "remove"]
+
+    all_para_ids = template_inspection.get("all_para_ids", [])
+    body_placeholder_count = len([
+        e for e in all_para_ids
+        if not e.get("is_front_matter") and e.get("para_id")
+    ])
+
+    # SOURCE_COVERAGE_LOW: heading ops < 5 usually means truncation
+    if len(heading_ops) < 5 and body_placeholder_count > 10:
+        warnings.append({
+            "op_index": 0,
+            "type": "source_coverage_low",
+            "severity": "high",
+            "code": "SOURCE_COVERAGE_LOW",
+            "message": (
+                f"Only {len(heading_ops)} heading ops generated but template has "
+                f"{body_placeholder_count} body placeholders. Source likely truncated "
+                f"or Planner generated incomplete ops. Retry with chunked planning."
+            ),
+            "heading_ops": len(heading_ops),
+            "body_ops": len(body_ops),
+            "remove_ops": len(remove_ops),
+            "body_placeholder_count": body_placeholder_count,
+            "total_ops": len(ops),
+        })
+
+    # REMOVE_OPS_MISSING: fewer than 80% of body placeholders have remove ops
+    remove_op_count = len(remove_ops)
+    if body_placeholder_count > 0:
+        completeness = remove_op_count / body_placeholder_count
+        if completeness < 0.6:
+            warnings.append({
+                "op_index": 0,
+                "type": "remove_ops_missing",
+                "severity": "high",
+                "code": "REMOVE_OPS_MISSING",
+                "message": (
+                    f"Only {remove_op_count} remove ops for {body_placeholder_count} "
+                    f"body placeholders ({completeness:.0%}). Template placeholders "
+                    f"will remain in output. Add remove ops for ALL non-front-matter placeholders."
+                ),
+                "remove_op_count": remove_op_count,
+                "body_placeholder_count": body_placeholder_count,
+                "completeness_pct": round(completeness * 100, 1),
+            })
+        elif completeness < 0.8:
+            warnings.append({
+                "op_index": 0,
+                "type": "remove_ops_low",
+                "severity": "medium",
+                "code": "REMOVE_OPS_LOW",
+                "message": (
+                    f"{remove_op_count}/{body_placeholder_count} remove ops "
+                    f"({completeness:.0%}). Below 80% threshold. Review missing placeholders."
+                ),
+                "remove_op_count": remove_op_count,
+                "body_placeholder_count": body_placeholder_count,
+                "completeness_pct": round(completeness * 100, 1),
+            })
+
+    return warnings
+
+
+def _check_reference_section(ops: list[dict]) -> list[dict]:
+    """Check if source likely contains a reference section that's missing from ops.
+
+    Detects presence of "TÀI LIỆU THAM KHẢO" / "REFERENCES" in ops.
+    """
+    warnings: list[dict] = []
+
+    heading_texts = [
+        str(op.get("text") or "").upper().strip()
+        for op in ops
+        if op.get("role") in ("h1", "h2", "h3")
+    ]
+
+    has_references = any(
+        kw in heading_texts
+        for kw in ["TÀI LIỆU THAM KHẢO", "REFERENCES", "THAM KHẢO"]
+    )
+
+    if not has_references and len(ops) > 10:
+        # Weak signal: check if any heading mentions reference-like terms
+        all_texts = " ".join(str(op.get("text") or "") for op in ops).upper()
+        if "THAM KHẢO" not in all_texts and "REFERENCES" not in all_texts:
+            warnings.append({
+                "op_index": 0,
+                "type": "reference_section_missing",
+                "severity": "medium",
+                "code": "MISSING_REFERENCE_SECTION",
+                "message": (
+                    "No heading with 'TÀI LIỆU THAM KHẢO' or 'REFERENCES' found in ops. "
+                    "If source has a reference section, it must be included."
+                ),
+            })
+
+    return warnings
+
+
+def _check_anchor_safety(
+    ops: list[dict],
+    template_inspection: dict,
+) -> list[dict]:
+    """Check that insert anchors are not removed by subsequent remove ops.
+
+    ANCHOR_REMOVED_AFTER_INSERT: an insert op uses an anchor paraId that is
+    later removed, which can cause structure errors.
+    """
+    warnings: list[dict] = []
+    front_matter_para_ids = collect_front_matter_para_ids(template_inspection)
+
+    removed_ids: set[str] = set()
+    for op in ops:
+        if op.get("op") == "remove":
+            path = str(op.get("path", ""))
+            if path.startswith("/body/p[@paraId="):
+                removed_ids.add(path.split("@paraId=")[1].rstrip("]"))
+
+    for i, op in enumerate(ops):
+        if op.get("op") not in ("insert_paragraph_after", "insert_paragraph_before"):
+            continue
+        anchor = str(op.get("anchor", ""))
+        if not anchor.startswith("/body/p[@paraId="):
+            continue
+        para_id = anchor.split("@paraId=")[1].rstrip("]")
+        if para_id in removed_ids and para_id not in front_matter_para_ids:
+            warnings.append({
+                "op_index": i + 1,
+                "type": "anchor_removed_after_insert",
+                "severity": "high",
+                "code": "ANCHOR_REMOVED_AFTER_INSERT",
+                "message": (
+                    f"Insert op #{i + 1} uses anchor {para_id} that is also "
+                    f"targeted by a remove op. This will cause structure errors. "
+                    f"Either use 'PREVIOUS' anchor or insert before the remove happens."
+                ),
+                "conflicting_para_id": para_id,
+            })
+
+    return warnings
+
+
+def _check_truncated_text(ops: list[dict]) -> list[dict]:
+    """Check for truncated text patterns in ops.
+
+    Detects text that ends mid-sentence, mid-word, or with incomplete
+    parentheticals — signs of source truncation.
+    """
+    warnings: list[dict] = []
+
+    for i, op in enumerate(ops):
+        text = str(op.get("text") or "").strip()
+        if not text:
+            continue
+
+        # Check for text ending mid-parenthetical
+        if text.rstrip().endswith("(") and not text.rstrip().endswith(")"):
+            warnings.append({
+                "op_index": i + 1,
+                "type": "truncated_text",
+                "severity": "high",
+                "code": "TRUNCATED_TEXT",
+                "message": (
+                    f"Op #{i + 1} text ends with unmatched '(' — likely truncated. "
+                    f"Text preview: '{text[-60:]}'"
+                ),
+            })
+
+        # Check for text ending mid-word (no period, no Vietnamese diacritic word ending)
+        last_word = text.rstrip().split()[-1] if text.rstrip().split() else ""
+        if (
+            len(text) > 80
+            and not text.rstrip()[-1] in ".!?…)"
+            and len(last_word) > 1
+            and last_word[-1].isalpha()
+            and last_word.lower() not in ("và", "của", "các", "những", "trong",
+                                           "với", "cho", "được", "không", "khi",
+                                           "là", "có", "để", "về", "như", "từ",
+                                           "the", "and", "of", "to", "in", "for",
+                                           "a", "an", "or", "by", "on", "at")
+        ):
+            warnings.append({
+                "op_index": i + 1,
+                "type": "truncated_text_end",
+                "severity": "medium",
+                "code": "TRUNCATED_TEXT_PATTERN",
+                "message": (
+                    f"Op #{i + 1} text may be truncated — does not end with "
+                    f"sentence-ending punctuation. Last word: '{last_word}'. "
+                    f"Text ends: '...{text[-60:]}'"
+                ),
+            })
+
+    return warnings
+
+
+def _write_planning_report(
+    ops: list[dict],
+    template_inspection: dict,
+    run_dir: Path,
+) -> dict:
+    """Write planning_report.json — mechanical coverage report.
+
+    Purely mechanical counts — no semantic interpretation.
+    LLM reads this to decide whether to retry.
+    """
+    from pathlib import Path as _Path
+
+    heading_ops = [op for op in ops if op.get("role") in ("h1", "h2", "h3")]
+    body_ops = [op for op in ops if op.get("role") == "body"]
+    remove_ops = [op for op in ops if op.get("op") == "remove"]
+    reference_ops = [
+        op for op in ops
+        if op.get("role") in ("h1", "h2", "h3")
+        and any(kw in str(op.get("text", "")).upper()
+                for kw in ["TÀI LIỆU THAM KHẢO", "REFERENCES"])
+    ]
+
+    all_para_ids = template_inspection.get("all_para_ids", [])
+    body_placeholder_count = len([
+        e for e in all_para_ids
+        if not e.get("is_front_matter") and e.get("para_id")
+    ])
+
+    report = {
+        "expected": {
+            "body_placeholder_count": body_placeholder_count,
+        },
+        "actual": {
+            "heading_ops": len(heading_ops),
+            "body_ops": len(body_ops),
+            "remove_ops": len(remove_ops),
+            "reference_ops": len(reference_ops),
+            "total_ops": len(ops),
+        },
+        "completeness_pct": {
+            "removes": round(
+                len(remove_ops) / max(body_placeholder_count, 1) * 100, 1
+            ),
+        },
+        "heading_breakdown": {
+            op.get("role", "unknown"): str(op.get("text", ""))[:80]
+            for op in heading_ops
+        },
+    }
+
+    report_path = run_dir / "planning_report.json"
+    write_json(report_path, report)
+    print(f"[docx_validate_ops] Planning report written to: {report_path}")
+    return report
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="docx_validate_ops: warn-only validator, zero blocking. "
@@ -690,6 +972,10 @@ def main() -> None:
 
     # Validate
     warnings = validate_ops_payload(ops_payload, template_inspection)
+
+    # Write planning_report.json (mechanical coverage report)
+    ops_list_data = ops_payload.get("ops", []) if isinstance(ops_payload, dict) else ops_payload
+    _write_planning_report(ops_list_data, template_inspection, run_dir)
 
     # Build report
     report = {

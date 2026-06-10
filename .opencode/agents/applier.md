@@ -1,5 +1,5 @@
 ---
-description: Applier - chạy applyExecutionOps(ops_only), trả build result
+description: Applier - chạy applyOps, trả build result
 mode: subagent
 model: sglang/Qwen3.6-35B-A3B-GGUF
 temperature: 0.6
@@ -28,8 +28,7 @@ Bạn là applier subagent. Chỉ gọi 1 tool, trả structured result.
 ```
 
 ## Execution Steps
-1. Gọi `applyExecutionOps(run_dir=run_dir, template_file=template_file, target_file=target_file, mode="ops_only")`
-   — Luôn dùng `mode="ops_only"`. Inspect đã chạy từ Phase 1.
+1. Gọi `applyOps(run_dir=run_dir, target_file=target_file)`
 
 ## Output Contract (BẮT BUỘC - JSON block cuối cùng)
 ```json

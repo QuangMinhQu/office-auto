@@ -1,14 +1,12 @@
 ---
 name: docx-qa
-description: Skill QA cho Word (.docx) khi thêm, sửa hoặc append nội dung. Dùng khi cần rà soát TOC, references, appendix, danh mục hình/bảng, cross-reference, header/footer, page numbering và các phần phụ thuộc cấu trúc tài liệu trước khi giao file.
+description: QA gate cho DOCX qua MCP tool `runQA`. Rà soát TOC, references, appendix, danh mục, cross-reference, header/footer, page numbering. OfficeCLI chỉ dùng secondary.
 license: MIT
 ---
 # SKILL: DOCX_QA
 
 ## Mục tiêu
-Skill này chỉ phụ trách QA và delivery gate cho `.docx`.
-Không dùng để tạo body từ đầu.
-Syntax command chi tiết vẫn tra cứu trong `officecli-docx`.
+QA execution chính qua MCP tool `runQA` (`mcp/tools/qa.ts`). OfficeCLI (`officecli-docx`) chỉ dùng làm secondary check khi cần debug raw.
 
 ## Khi nào phải load skill này
 - Trước khi bàn giao file `.docx`.

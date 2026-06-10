@@ -9,14 +9,19 @@ license: MIT
 ## Trình tự chạy
 Scripts là tay, LLM là não.
 
-Các primitive này duoc expose qua MCP server `office-auto` (`mcp/office-auto-server.ts`). Moi phase la mot MCP tool rieng biet.
+Các primitive này được expose qua MCP server `office-auto` (`mcp/office-auto-server.ts`). Mỗi phase là một MCP tool riêng biệt.
 
-1. `docx_inspect.py` — raw dump, zero heuristics
-2. **[LLM REASONING]** — đọc inspection output + markdown headings, viết `execution_ops.json`
-3. `docx_validate_ops.py` — warn-only validator
-4. `execute_execution_ops.py` — mechanical executor
-5. `docx_read_result.py` — readback để verify
-6. `qa_docx.py` / `review_docx.py` — metrics và summary
+Full flow (theo orchestrator contract):
+1. `docx_inspect.py` — raw dump, zero heuristics → `inspectTemplate` (MCP)
+2. `prepareInsertPlan` (MCP: `mcp/tools/scaffold.ts`) — aggregate inspection + markdown headings vào scaffold
+3. `source_packet.py` — mechanical block splitter, chia source thành typed blocks để tránh truncation
+4. **[LLM REASONING/Planner]** — đọc scaffold + source_packet blocks, viết `execution_ops.json`
+5. `docx_validate_ops.py` — warn-only validator, tự động viết `planning_report.json`
+6. `execute_execution_ops.py` — mechanical executor
+7. `qa_docx.py` — QA metrics (placeholder leak, references, TOC)
+8. `docx_read_result.py` + `review_docx.py` — readback + review
+9. `docx_refresh_fields.py` — refresh TOC/field codes
+10. **Final gate**: reviewer.passed + qa.placeholder_ok + qa.references_ok + TOC refreshed
 
 ## Artifacts
 | File | Mô tả |
@@ -29,17 +34,30 @@ Các primitive này duoc expose qua MCP server `office-auto` (`mcp/office-auto-s
 | `docx_inspect_page_layout_raw.json` | Paper size, margins (twips) |
 | `docx_inspect_toc_entries_raw.json` | TOC fields + bookmark anchors |
 | `docx_inspect_front_matter_boundary.json` | Last paraId trước body content |
-| `docx_inspect_content_map.json` | Front-matter/body anchor map |
+| `docx_inspect_content_map.json` | Front-matter/body anchor map with body_placeholders |
+| `insert_plan_scaffold.json` | Aggregated scaffold from prepareInsertPlan (MCP) |
+| `source_packet.json` | Mechanical block-split source (typed blocks + SHA-256) |
 | `execution_ops.json` | LLM-generated ops |
 | `execution_ops_validation.json` | Validator warnings |
+| `planning_report.json` | Coverage report (expected vs actual ops counts) |
 | `execute_ops_report.json` | Execution summary |
 | `qa_report.json` | QA metrics after build |
 | `review_report.json` / `review_report.md` / `review_screen.html` | Semantic review artifacts |
 | `result_readback.json` | Output DOCX readback |
+| `post_process_report.json` | TOC/field refresh report |
 
-## Required Steps
+## Required Steps (theo orchestrator contract)
 
-1. `reviewOutput` — run review_docx.py and expose review artifacts (optional, post-build)
+1. `inspectTemplate` (MCP) — chạy docx_inspect.py
+2. `prepareInsertPlan` (MCP) — aggregate inspection + headings → scaffold
+3. `source_packet.py` — mechanical block splitter, tránh source truncation
+4. Planner writes `execution_ops.json`
+5. `validateOps` (MCP) — chạy docx_validate_ops.py, writes planning_report.json
+6. `applyOps` (MCP) — execute ops on DOCX
+7. `runQA` (MCP) — QA metrics: placeholder leak, references, TOC
+8. `reviewOutput` (MCP) — semantic review artifacts
+9. `refreshFields` (MCP) — TOC/field code refresh
+10. Final gate: reviewer.passed + qa.placeholder_ok + qa.references_ok + TOC refreshed
 
 ## LLM Reasoning Chain
 

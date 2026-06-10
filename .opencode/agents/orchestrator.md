@@ -100,9 +100,38 @@ Lưu vào `scaffold_summary`:
 
 ---
 
-# Phase 2 — Parse Markdown (orchestrator tự làm)
+# Phase 1.5 — Prepare Insert Plan (NEW — mandatory)
 
-Lấy heading:
+Sau khi có inspection, chạy `prepareInsertPlan` để lấy full scaffold với **toàn bộ body_placeholders** (không slice):
+
+```bash
+python3 -c "
+import json
+# Read insert_plan_scaffold.json (written by prepareInsertPlan tool)
+# Extract body_placeholders.para_ids + total_count
+# Verify total_count matches actual para_ids length
+"
+```
+
+Hoặc orchestrator có thể gọi MCP tool `prepareInsertPlan` qua bash:
+
+```bash
+# prepareInsertPlan is an MCP tool — orchestrator calls it via the MCP server
+# Output: {run_dir}/insert_plan_scaffold.json
+```
+
+Verify scaffold:
+- `body_placeholders.total_count` > 0
+- `body_placeholders.remove_op_required` == true
+- `body_placeholders.para_ids` có đầy đủ tất cả body placeholder IDs (không bị slice)
+
+Nếu scaffold file không tồn tại → fallback: dùng `scaffold_summary` từ Phase 1.
+
+---
+
+# Phase 2 — Parse Markdown + Source Packet (orchestrator tự làm)
+
+## Phase 2a — Parse headings
 
 ```bash
 grep -n "^#" {source_file} | head -50
@@ -120,20 +149,30 @@ markdown_headings = [
 ]
 ```
 
-Đọc `source_file` bằng Read tool **1 lần duy nhất**.
+## Phase 2b — Generate source_packet.json (NEW)
 
-Lưu toàn bộ nội dung vào:
+Thay vì đọc toàn bộ source rồi truyền raw text, dùng `source_packet.py` để splits source thành blocks:
 
-```text
-source_content
+```bash
+python3 .opencode/skills/md-to-docx-pipeline/scripts/source_packet.py \
+  --source {source_file} \
+  --run-dir {run_dir} \
+  --max-blocks-per-chunk 30
 ```
 
-Ước lượng `estimated_ops` từ `markdown_headings` và độ dày nội dung của từng section.
+Output: `{run_dir}/source_packet.json`
 
-- Nếu `estimated_ops > 40` hoặc file có nhiều chapter lớn, bật `use_chunked_planning = true`
-- Nếu `use_chunked_planning = true`, chia `source_content` theo các H1/H2 chapter lớn rồi plan theo chunk
-- Chỉ truyền chunk hiện tại cho planner, không truyền lại toàn bộ `source_content` nếu đã chunk
+Đọc source_packet.json để lấy:
+- `sha256` — để verify integrity khi chunk
+- `blocks[]` — danh sách block cơ học (heading, paragraph, caption_candidate, list_item, empty_line)
+- `block_count` — tổng số blocks
+
+Ước lượng `estimated_ops` từ `markdown_headings` và `block_count`.
+
+- Nếu `block_count > 30`, bật `use_chunked_planning = true`
+- Nếu `use_chunked_planning = true`, dùng `source_packet.py --chunk-index N` để lấy chunk
 - Khi chunking, giữ continuity bằng cách truyền anchor cuối của chunk trước làm mốc cho chunk sau
+- Planner nhận `source_blocks` (từ `source_packet.json`) thay vì `source_content` thô
 
 ---
 
@@ -156,12 +195,16 @@ Task(
     scaffold_summary: scaffold_summary,
     markdown_headings: markdown_headings,
     source_content: source_content_or_chunk,
+    source_blocks: source_blocks_or_chunk,
     retry_hint: null,
     chunk_id: chunk_id_or_null,
     previous_chunk_last_anchor: previous_chunk_last_anchor_or_null
   })
 )
 ```
+
+> **NEW**: Ưu tiên truyền `source_blocks` (từ `source_packet.json`) thay vì `source_content` thô.
+> `source_blocks` = array of `{id, type, text, line_start, line_end}` — types are MECHANICAL only.
 
 Planner sẽ tự gọi `write_file(path="{run_dir}/execution_ops.json", ...)` — viết trực tiếp ra disk.
 Sau đó đọc file để verify:
@@ -197,6 +240,21 @@ Nếu validation fail:
 - Retry đúng 1 lần với `retry_hint` rõ ràng
 - Nếu vẫn fail sau retry, dừng workflow và báo user thay vì tiếp tục loop
 - KHÔNG tự fallback viết ops — luôn để Planner viết lại
+
+---
+
+# Phase 3.5 — Planning Coverage Check (NEW)
+
+Sau khi Planner viết `execution_ops.json`, validator tự động viết `planning_report.json`:
+
+```bash
+cat {run_dir}/planning_report.json | python3 -m json.tool
+```
+
+Kiểm tra `planning_report.json`:
+- `actual.heading_ops` < 5 và `expected.body_placeholder_count` > 10 → **SOURCE_COVERAGE_LOW**, retry với chunked planning
+- `actual.remove_ops` < `expected.body_placeholder_count` * 0.8 → **REMOVE_OPS_MISSING**, retry với retry_hint cụ thể
+- `actual.reference_ops` == 0 và source có "TÀI LIỆU THAM KHẢO" → **MISSING_REFERENCE_SECTION**
 
 ---
 
@@ -256,7 +314,7 @@ thì:
 
 ---
 
-# Phase 6 — Review
+# Phase 6 — Review + QA
 
 ```text
 Task(
@@ -270,35 +328,64 @@ Task(
 
 ---
 
-# Phase 7 — Retry Loop
+# Phase 7 — Refresh TOC (NEW — mandatory after Review passed)
 
-## Success
+Sau khi Reviewer trả `passed=true`, chạy refresh TOC:
 
-Nếu:
-
-```text
-reviewer.passed == true
+```bash
+python3 .opencode/skills/md-to-docx-pipeline/scripts/docx_refresh_fields.py \
+  --target-file {target_file} \
+  --strategy auto \
+  --run-dir {run_dir}
 ```
 
-thì:
+Nếu refresh fail, mark dirty:
 
-```text
-DONE
-```
-
-Báo user:
-
-```text
-Hoàn thành. File: {target_file}, Run: {run_dir}
-```
-
-Cập nhật:
-
-```text
-.opencode/memory/task_current.md
+```bash
+python3 .opencode/skills/md-to-docx-pipeline/scripts/docx_refresh_fields.py \
+  --target-file {target_file} \
+  --strategy mark_dirty \
+  --run-dir {run_dir}
 ```
 
 ---
+
+# Phase 8 — Final Gate (HARD — không có ngoại lệ)
+
+Task chỉ được coi là DONE khi **TẤT CẢ** các điều kiện sau đúng:
+
+```yaml
+final_gate:
+  reviewer_passed: true
+  qa_placeholder_leak: false        # từ qa_report.json
+  qa_references_ok: true            # từ qa_report.json
+  toc_refreshed: true               # Phase 7 completed
+  planning_report_valid: true       # không có SOURCE_COVERAGE_LOW high warning
+```
+
+```bash
+# Verify final gate
+python3 -c "
+import json
+qa = json.load(open('{run_dir}/qa_report.json'))
+print(f'placeholder_leak: {qa.get(\"placeholder_ok\", \"?\" )}')
+print(f'references_ok: {qa.get(\"references_ok\", \"?\")}')
+print(f'qa_status: {qa.get(\"status\", \"?\")}')
+"
+```
+
+Nếu tất cả đạt → update `task_current.md` và output:
+
+```text
+✅ Hoàn thành. File: {target_file}, Run: {run_dir}
+   - Reviewer: passed
+   - QA: no placeholder leak, references OK
+   - TOC: refreshed
+```
+
+---
+
+# Phase 9 — Retry Loop
 
 ## Failure
 
@@ -306,6 +393,12 @@ Nếu:
 
 ```text
 reviewer.passed == false
+```
+
+hoặc:
+
+```text
+qa.placeholder_leak == true
 ```
 
 và:
@@ -332,7 +425,7 @@ retry_count += 1
 Quan trọng:
 
 - Đã có `scaffold_summary`
-- Đã có `source_content`
+- Đã có `source_packet`
 
 Nên:
 
@@ -343,10 +436,12 @@ Chạy lại:
 
 ```text
 Phase 3 (retry_hint = reviewer.retry_hint)
+→ Phase 3.5
 → Phase 4
 → Phase 5
 → Phase 6
 → Phase 7
+→ Phase 8
 ```
 
 ---
@@ -354,15 +449,17 @@ Phase 3 (retry_hint = reviewer.retry_hint)
 # Tuyệt đối KHÔNG làm
 
 - Tự gọi `inspectTemplate`
-- Tự gọi `validateExecutionOps`
-- Tự gọi `applyExecutionOps`
-- Tự gọi `readResult`
+- Tự gọi `validateOps`
+- Tự gọi `applyOps`
 - Tự gọi `reviewOutput`
+- Tự gọi `runQA`
+- Tự gọi `refreshFields`
 - Để subagent tự đọc `source_file`
 - Để subagent tự đọc `docx_inspect_output.json`
 - Re-inspect template trong retry loop
 - Tăng `retry_count` khi applier fail
 - Báo `"done"` khi reviewer chưa trả `passed=true`
+- Báo `"done"` khi chưa qua Final Gate (Phase 8)
 - Loop reasoning quá 2 turns về cùng một quyết định
 - Tự gọi bất kỳ tool nào (kể cả bash write) cho ops generation
 - Viết bất kỳ file artifact nào — chỉ subagent mới được write file
@@ -373,7 +470,7 @@ Phase 3 (retry_hint = reviewer.retry_hint)
 2. Subagent chỉ nhận context tối thiểu cần thiết.
 3. Source markdown chỉ được đọc một lần trong toàn workflow.
 4. Template chỉ được inspect một lần trong toàn workflow.
-5. Reviewer là nguồn sự thật cuối cùng để quyết định hoàn thành.
+5. Reviewer + QA + TOC refresh = hard final gate (Phase 8).
 
 # Tránh Thinking Loop (Anti-Thinking Loop Guidelines)
 

@@ -67,12 +67,13 @@ export function registerScaffoldTool(server: McpServer, worktree: string) {
         do_not_use_styles: stylesForLlm?.do_not_use_styles || inspection?.styles_for_llm?.do_not_use_styles || [],
         front_matter: frontMatterBlock,
         body_placeholders: {
-          para_ids: bodyParaIds.slice(0, 50),
+          para_ids: bodyParaIds,
           description: bodyPlaceholders.description || "",
           total_count: bodyParaIds.length,
+          remove_op_required: true,
+          remove_op_rule: "MUST add remove op for EVERY body_placeholder paraId whose is_front_matter==false. Remove ops in SAME execution_ops.json as insert ops.",
           details: (inspection?.all_para_ids || [])
             .filter((p: any) => !p.is_front_matter && bodyParaIds.includes(p.para_id))
-            .slice(0, 50)
             .map((p: any) => ({
               paraId: p.para_id,
               text_preview: (p.text_preview || "").slice(0, 60),
@@ -80,7 +81,7 @@ export function registerScaffoldTool(server: McpServer, worktree: string) {
               style_name: p.style_name || null,
             })),
         },
-        placeholder_note: "Only first 50 body placeholders shown. Full list in docx_inspect_content_map.json. Each entry carries is_front_matter and style_name for LLM reasoning.",
+        placeholder_note: "ALL body placeholders shown (no truncation). Each entry carries is_front_matter and style_name for LLM reasoning. remove_op_required=true means you MUST include remove ops for all non-front-matter placeholders.",
         markdown_headings: headings,
         markdown_heading_count: headings.length,
         paragraph_count: Array.isArray(inspection?.paragraph_sample) ? inspection.paragraph_sample.length : 0,

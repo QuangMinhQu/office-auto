@@ -33,7 +33,7 @@ Tài liệu này chốt các cấu hình đã thêm để OpenCode và Copilot A
 ## Lý do cấu hình này phù hợp
 
 - Repo này đã có pipeline deterministic mạnh; điều thiếu là agent-access path và workspace automation.
-- OfficeCLI MCP vẫn là execution path native phù hợp nhất cho phần thực thi Office, còn `office-auto` MCP server giúp agent gọi trọn DOCX pipeline ngay trong workspace.
+- OfficeCLI MCP là secondary execution path, chỉ dùng cho bootstrap và emergency debug. `office-auto` MCP server (`mcp/tools/*.ts`) là execution path duy nhất cho DOCX pipeline.
 - Review layer mới đã có artifact riêng, nên task `Latest Review Summary` giúp agent/human vào đúng output thay vì dò tay trong `.office-auto/state`.
 
 ## Điều chưa cấu hình trực tiếp
