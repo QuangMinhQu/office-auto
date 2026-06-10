@@ -8,9 +8,10 @@ import { registerQATool } from "./tools/qa"
 import { registerReviewTool } from "./tools/review"
 import { registerRefreshTool } from "./tools/refresh"
 import { registerOrchestratorTool } from "./tools/orchestrator"
+import { registerCompilerTool } from "./tools/compiler"
 
 const WORKTREE = process.env.OFFICE_AUTO_WORKSPACE ?? process.cwd()
-const server = new McpServer({ name: "office-auto", version: "1.0.0" })
+const server = new McpServer({ name: "office-auto", version: "3.0.0" })
 
 registerScaffoldTool(server, WORKTREE)
 registerInspectTool(server, WORKTREE)
@@ -20,6 +21,7 @@ registerQATool(server, WORKTREE)
 registerReviewTool(server, WORKTREE)
 registerRefreshTool(server, WORKTREE)
 registerOrchestratorTool(server, WORKTREE)
+registerCompilerTool(server, WORKTREE)
 
 process.on("uncaughtException", (error) => {
   console.error(error)

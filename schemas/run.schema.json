@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://office-auto.dev/schemas/run.schema.json",
+  "title": "Run State Schema",
+  "description": "Schema for run.json — the atomic state machine tracking pipeline progression.",
+  "type": "object",
+  "required": ["run_id", "pipeline_version", "phase", "template_file", "final_gate"],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique run identifier (timestamp format: YYYYMMDDTHHMMSS_template)."
+    },
+    "pipeline_version": {
+      "type": "string",
+      "enum": ["2", "3"],
+      "description": "Pipeline version. v3 = deterministic compiler, v2 = legacy LLM-driven."
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "created", "inspecting", "inspected",
+        "scaffolding", "scaffolded",
+        "source_packeting", "source_packeted",
+        "compiling", "compiled",
+        "validating", "validated_strict", "validated",
+        "applying", "built", "build_partial", "failed",
+        "qa", "reviewing",
+        "refreshing",
+        "final_gate", "complete", "failed_final_gate"
+      ],
+      "description": "Current pipeline phase (atomic state machine)."
+    },
+    "template_file": {
+      "type": "string",
+      "description": "Absolute path to the template DOCX."
+    },
+    "source_file": {
+      "type": "string",
+      "description": "Absolute path to the source markdown file."
+    },
+    "target_file": {
+      "type": "string",
+      "description": "Absolute path to the output DOCX."
+    },
+    "strict_mode": {
+      "type": "boolean",
+      "description": "If true, hard-block apply on validation failure."
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Map of artifact names to file paths.",
+      "properties": {
+        "docx_inspect_output": { "type": "string" },
+        "insert_plan_scaffold": { "type": "string" },
+        "source_packet": { "type": "string" },
+        "style_map": { "type": "string" },
+        "replace_range": { "type": "string" },
+        "execution_ops": { "type": "string" },
+        "strict_validation": { "type": "string" },
+        "execution_ops_validation": { "type": "string" },
+        "execute_ops_report": { "type": "string" },
+        "qa_report": { "type": "string" },
+        "review_report": { "type": "string" },
+        "post_process_report": { "type": "string" },
+        "final_gate": { "type": "string" },
+        "target_file": { "type": "string" }
+      }
+    },
+    "final_gate": {
+      "type": "object",
+      "required": ["passed"],
+      "properties": {
+        "passed": { "type": "boolean" }
+      }
+    }
+  }
+}

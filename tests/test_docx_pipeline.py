@@ -23,7 +23,10 @@ class ValidateOpsTests(unittest.TestCase):
     def test_validate_ops_payload_warns_for_unknown_style_and_anchor(self) -> None:
         template_inspection = {
             "styles_raw": [{"style_id": "Normal"}, {"style_id": "Heading1"}],
-            "all_para_ids": [{"para_id": "001"}, {"para_id": "002"}],
+            "all_para_ids": [
+                {"para_id": "001", "is_front_matter": True},
+                {"para_id": "002", "is_front_matter": True},
+            ],
             "paragraph_sample": [{"para_id": "001"}],
             "body_children": [{"path": "/body/p[1]"}],
             "body_paragraphs": [{"path": "/body/p[1]"}],
@@ -216,8 +219,8 @@ class ValidateOpsIdxAwarenessTests(unittest.TestCase):
         template_inspection = {
             "styles_raw": [{"style_id": "Normal"}],
             "all_para_ids": [
-                {"para_id": "001"},
-                {"para_id": "IDX_00005", "is_synthetic_id": True},
+                {"para_id": "001", "is_front_matter": True},
+                {"para_id": "IDX_00005", "is_synthetic_id": True, "is_front_matter": True},
             ],
             "paragraph_sample": [{"para_id": "001"}],
             "body_children": [{"path": "/body/p[1]"}],
@@ -230,12 +233,15 @@ class ValidateOpsIdxAwarenessTests(unittest.TestCase):
                     "anchor": "IDX_00005",
                     "style": "Normal",
                     "text": "Test",
+                    "role": "body",
                 }
             ]
         }
         warnings = docx_validate_ops.validate_ops_payload(ops_payload, template_inspection)
-        # Should have no warnings (synthetic ID is valid, style is valid)
-        self.assertEqual(len(warnings), 0)
+        # Should have no HIGH warnings (completeness warnings about missing remove ops are expected
+        # in this narrow test, but the synthetic anchor and style should be valid)
+        high_warnings = [w for w in warnings if w.get("severity") == "high"]
+        self.assertEqual(len(high_warnings), 0, f"Expected no high warnings, got: {high_warnings}")
 
 
 class SafeXmlToStringTests(unittest.TestCase):

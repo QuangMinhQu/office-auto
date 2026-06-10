@@ -1,256 +1,149 @@
 ---
 name: md-to-docx-pipeline
-description: Primitive DOCX toolchain — inspect raw, validate execution ops, apply ops, read result.
+description: Deterministic DOCX compiler pipeline — LLM decides mapping, scripts compile.
 license: MIT
 ---
 
 # SKILL: MD_TO_DOCX_PIPELINE
 
-## Trình tự chạy
-Scripts là tay, LLM là não.
+## Triết lý (updated v3)
 
-Các primitive này được expose qua MCP server `office-auto` (`mcp/office-auto-server.ts`). Mỗi phase là một MCP tool riêng biệt.
+> **LLM là não cho quyết định mơ hồ; Scripts là tay cho thao tác chính xác; Final gate là code, không phải lời nhắc trong prompt.**
 
-Full flow (theo orchestrator contract):
-1. `docx_inspect.py` — raw dump, zero heuristics → `inspectTemplate` (MCP)
-2. `prepareInsertPlan` (MCP: `mcp/tools/scaffold.ts`) — aggregate inspection + markdown headings vào scaffold
-3. `source_packet.py` — mechanical block splitter, chia source thành typed blocks để tránh truncation
-4. **[LLM REASONING/Planner]** — đọc scaffold + source_packet blocks, viết `execution_ops.json`
-5. `docx_validate_ops.py` — warn-only validator, tự động viết `planning_report.json`
-6. `execute_execution_ops.py` — mechanical executor
-7. `qa_docx.py` — QA metrics (placeholder leak, references, TOC)
-8. `docx_read_result.py` + `review_docx.py` — readback + review
-9. `docx_refresh_fields.py` — refresh TOC/field codes
-10. **Final gate**: reviewer.passed + qa.placeholder_ok + qa.references_ok + TOC refreshed
+Trong bài toán "lấy markdown đã chia level → đổ vào template DOCX, giữ phần mặc định ít thay đổi":
+- LLM **không** copy nội dung.
+- LLM **không** sinh hàng trăm ops.
+- LLM chỉ quyết định: vùng thay thế, mapping style, exception handling, review.
+- Phần còn lại là compiler/script deterministic.
 
-## Artifacts
-| File | Mô tả |
-|---|---|
-| `docx_inspect_output.json` | Combined output (all layers) |
-| `docx_inspect_paragraph_sample.json` | 30 paragraphs đầu (quick reference) |
-| `docx_inspect_all_para_ids.json` | TẤT CẢ paraIds (full document, dùng cho anchor) |
-| `docx_inspect_styles_raw.json` | Paragraph styles + outline_level_xml |
-| `docx_inspect_styles_for_llm.json` | Compact style summary for LLM reasoning |
-| `docx_inspect_page_layout_raw.json` | Paper size, margins (twips) |
-| `docx_inspect_toc_entries_raw.json` | TOC fields + bookmark anchors |
-| `docx_inspect_front_matter_boundary.json` | Last paraId trước body content |
-| `docx_inspect_content_map.json` | Front-matter/body anchor map with body_placeholders |
-| `insert_plan_scaffold.json` | Aggregated scaffold from prepareInsertPlan (MCP) |
-| `source_packet.json` | Mechanical block-split source (typed blocks + SHA-256) |
-| `execution_ops.json` | LLM-generated ops |
-| `execution_ops_validation.json` | Validator warnings |
-| `planning_report.json` | Coverage report (expected vs actual ops counts) |
-| `execute_ops_report.json` | Execution summary |
-| `qa_report.json` | QA metrics after build |
-| `review_report.json` / `review_report.md` / `review_screen.html` | Semantic review artifacts |
-| `result_readback.json` | Output DOCX readback |
-| `post_process_report.json` | TOC/field refresh report |
-
-## Required Steps (theo orchestrator contract)
-
-1. `inspectTemplate` (MCP) — chạy docx_inspect.py
-2. `prepareInsertPlan` (MCP) — aggregate inspection + headings → scaffold
-3. `source_packet.py` — mechanical block splitter, tránh source truncation
-4. Planner writes `execution_ops.json`
-5. `validateOps` (MCP) — chạy docx_validate_ops.py, writes planning_report.json
-6. `applyOps` (MCP) — execute ops on DOCX
-7. `runQA` (MCP) — QA metrics: placeholder leak, references, TOC
-8. `reviewOutput` (MCP) — semantic review artifacts
-9. `refreshFields` (MCP) — TOC/field code refresh
-10. Final gate: reviewer.passed + qa.placeholder_ok + qa.references_ok + TOC refreshed
-
-## LLM Reasoning Chain
-
-### Bước 1 — Page layout
-Đọc `page_layout_raw` từ `docx_inspect_output.json`. Convert twips → mm: `1 twip = 1/1440 inch = 0.0176mm`.
-
-### Bước 2 — Style inheritance tree
-Đọc `styles_raw`. `space_before_pt: null` = inherited — để LLM interpret.
-
-### Bước 3 — Classify document type
-Đọc `markdown_headings` từ source + `toc_entries_raw`. Xác định academic/legal/etc.
-**KHÔNG đọc toàn bộ noidung.md** — chỉ cần heading structure để classify.
-
-#### Verify heading levels (Issue #6 fix)
-Trước khi map markdown → Word styles, kiểm tra:
-- `# 1.4.` → Có thể là lỗi trong noidung.md. Nếu numbering depth = 2 (1.x) thì
-  đây phải là `## 1.4.`, không phải `# 1.4.`
-- Luôn ưu tiên số lượng `#` ký tự trong markdown, KHÔNG suy luận từ numbering prefix.
-- Nếu số `#` và numbering depth mâu thuẫn, flag "heading_level_warning" và chọn
-  theo `#` count (source of truth).
-
-### Bước 4 — Map markdown → Word styles
-- `# heading` → style from `heading_map.h1` (outline_level_xml: 0)
-- `## heading` → style from `heading_map.h2` (outline_level_xml: 1)
-- `### heading` → style from `heading_map.h3` (outline_level_xml: 2)
-- `paragraph` → `body_text_style` (first_line_indent: 36pt)
-
-`heading_map` uses `style_id` (not display name): `{"h1": "TieuDe1", "h2": "TieuDe2", "h3": "TieuDe3"}`
-
-### Bước 5 — Viết execution_ops.json
-Mỗi paragraph trong noidung.md → 1 op.
-
-Anchor convention:
-- Op đầu tiên: `/body/p[@paraId=XXXX]` từ `all_para_ids.json`
-- Các op tiếp theo: `"PREVIOUS"` — executor tự động track last inserted path
-
-#### run_props Policy
-- **KHÔNG bao giờ** set `run_props.font`, `run_props.size` cho heading ops → inherit từ style
-- `run_props` chỉ dùng cho body text khi cần override (bold, italic inline)
-- `para_props` chỉ set nếu template không có default hoặc cần thay đổi rõ ràng
-
-#### Template Placeholder Rule
-Sau khi viết tất cả insert ops, LUÔN thêm remove ops cho:
-- Tất cả paragraphs trong `body_placeholders` (từ `content_map.json`)
-- **NGOẠI TRỪ**: paragraphs có `is_front_matter: true` trong `all_para_ids`
-- **NGOẠI TRỪ**: `CRITICAL_FIRST_OP_ANCHOR` paragraph (chính là điểm neo)
-Remove ops phải được viết trong CÙNG `execution_ops.json` với insert ops,
-không được tách thành 2 file riêng hay 2 lần chạy executor.
-
-#### Preserved Structural Headings Rule (DATA-DRIVEN)
-
-Khi viết remove ops cho `body_placeholders`, với MỖI paraId trong danh sách,
-kiểm tra entry tương ứng trong `all_para_ids`:
+## Trình tự chạy (v3 — deterministic compiler)
 
 ```
-IF all_para_ids[paraId].is_front_matter == true → SKIP, không remove
+1. docx_inspect.py        → dump raw template (NO LLM)
+2. source_packet.py       → mechanical markdown AST (NO LLM)
+3. [LLM/Mapper]           → decide style_map.json + replace_range.json (ONLY ambiguous decisions)
+4. source_packet_to_ops.py → deterministic compile AST → execution_ops.json (NO LLM)
+5. validate_ops_strict.py → hard-block validation (CODE, not prompt)
+6. execute_execution_ops.py → mechanical executor (NO LLM)
+7. verify_docx_output.py  → readback + coverage verification (NO LLM)
+8. qa_docx.py             → QA metrics (NO LLM)
+9. review_docx.py         → semantic review (LLM optional)
+10. docx_refresh_fields.py → TOC/field refresh (NO LLM)
+11. final_gate.py          → CODE-LEVEL final gate (NO LLM, NO prompt)
 ```
 
-Quy tắc này là **data-driven** — không cần hardcode style name hay text pattern.
-`is_front_matter` được `docx_inspect.py` gán dựa trên vị trí thực tế của paragraph
-so với `front_matter_boundary` (XML fact, không phải heuristic).
+## Artifacts (v3)
+| File | Mô tả | Sinh bởi |
+|---|---|---|
+| `docx_inspect_output.json` | Full template inspection | `docx_inspect.py` |
+| `docx_inspect_styles_for_llm.json` | Compact style summary | `docx_inspect.py` |
+| `docx_inspect_content_map.json` | Front-matter/body anchor map | `docx_inspect.py` |
+| `insert_plan_scaffold.json` | Aggregated scaffold | MCP tool `scaffold` |
+| `source_packet.json` | Mechanical markdown AST (typed blocks + SHA-256) | `source_packet.py` |
+| `style_map.json` | LLM quyết định: markdown level → DOCX style_id | MapperAgent (hoặc mặc định) |
+| `replace_range.json` | LLM quyết định: insert anchor + remove paths | MapperAgent (hoặc mặc định) |
+| `execution_ops.json` | Deterministic compiled ops | `source_packet_to_ops.py` |
+| `strict_validation.json` | Hard-block validation report | `validate_ops_strict.py` |
+| `execution_ops_validation.json` | Warn-only validation + planning report | `docx_validate_ops.py` |
+| `planning_report.json` | Coverage report (heading/body/remove counts) | `docx_validate_ops.py` |
+| `execute_ops_report.json` | Execution summary | `execute_execution_ops.py` |
+| `result_readback.json` | Output DOCX readback | `docx_read_result.py` |
+| `coverage_report.json` | Source block coverage verification | `verify_docx_output.py` |
+| `qa_report.json` | QA metrics | `qa_docx.py` |
+| `review_report.json` | Semantic review | `review_docx.py` |
+| `post_process_report.json` | TOC/field refresh report | `docx_refresh_fields.py` |
+| `final_gate.json` | CODE-LEVEL final gate verdict | `final_gate.py` |
+| `run.json` | Atomic state machine | MCP tools |
 
-**Validator enforcement**: `docx_validate_ops.py` đọc `is_front_matter` từ inspection
-data và emit `code: "REMOVE_FRONT_MATTER"` warning nếu remove op nhắm vào front matter.
-Orchestrator đọc warning này và quyết định retry.
+## LLM Reasoning Chain (v3 — simplified)
 
-Nếu `noidung.md` không có nội dung cho KẾT LUẬN hoặc TÀI LIỆU THAM KHẢO,
-VẪN phải insert heading placeholder để navigation bar hiển thị đúng:
+### Chỉ 2 quyết định LLM cần đưa ra:
+
+#### 1. Style map
 ```json
 {
-  "op": "insert_paragraph_after",
-  "anchor": "PREVIOUS",
-  "style": "Heading1",
-  "text": "KẾT LUẬN"
+  "h1": "<style_id from heading_map.h1>",
+  "h2": "<style_id from heading_map.h2>",
+  "h3": "<style_id from heading_map.h3>",
+  "body": "<body_text_style>",
+  "caption": "<caption_style if available, else body>",
+  "preserve_zones": ["front_matter", "toc", "headers_footers"]
 }
 ```
 
-TOC entries (style `toc 1`) nằm trong front matter zone → `is_front_matter: true`
-→ đã được bảo vệ tự động bởi rule trên. Chỉ remove body content placeholders,
-giữ nguyên structural elements.
-
-#### execution_ops Schema
-Mỗi op phải có field `role` để executor/validator phân biệt heading vs body:
-- `role: "h1" | "h2" | "h3"` cho headings
-- `role: "body"` cho body text
-- `role: "toc"` cho TOC entries
-
+#### 2. Replace range
 ```json
 {
-  "version": "2",
-  "ops": [
-    {
-      "op": "insert_paragraph_after",
-      "role": "h1",
-      "anchor": "/body/p[@paraId=49349C0D]",
-      "style": "<style_id from heading_map.h1>",
-      "text": "CHƯƠNG 1. CƠ SỞ LÝ THUYẾT",
-      "bookmark": "_Toc_ch1"
-    },
-    {
-      "op": "insert_paragraph_after",
-      "role": "body",
-      "anchor": "PREVIOUS",
-      "style": "<body_text_style>",
-      "text": "Nội dung chương 1...",
-      "run_props": { "font": "Times New Roman", "size_pt": 13 },
-      "para_props": { "first_line_indent_pt": 36, "line_spacing": 1.5 }
-    },
-    {
-      "op": "remove",
-      "path": "/body/p[@paraId=PLACEHOLDER_ID]"
-    }
-  ]
+  "insert_after_path": "/body/p[@paraId=49349C0D]",
+  "remove_paths": [
+    "/body/p[@paraId=PLACEHOLDER1]",
+    "/body/p[@paraId=PLACEHOLDER2]"
+  ],
+  "remove_rule": "remove all body placeholders not in front_matter"
 }
 ```
 
-#### Remove Ops Completeness Self-Check
-Trước khi finalize execution_ops.json, đếm:
-- `body_placeholder_count` = số entries trong all_para_ids có `is_front_matter: false`
-- `remove_op_count` = số ops có `"op": "remove"` trong file
-- Nếu `remove_op_count < body_placeholder_count * 0.8` → PHẢI review lại,
-  có khả năng đang thiếu remove ops.
+### Không còn:
+- ❌ LLM copy 125 blocks thành 125 JSON ops
+- ❌ LLM sinh `execution_ops.json` dài hàng KB
+- ❌ Planner với `steps: 8` và hard limits 80 ops
+- ❌ Chunking content vì sợ context không xử lý nổi
 
-#### TOC Refresh Protocol
-Sau khi apply ops, TOC field cần được refresh. Có 3 chiến lược:
-1. **LibreOffice headless** (preferred): `docx_refresh_fields.py --strategy libreoffice`
-2. **mark_dirty** (fallback): `docx_refresh_fields.py --strategy mark_dirty` — đánh dấu fields dirty để Word tự refresh khi mở
-3. **OfficeCLI refresh** (optional): nếu OfficeCLI hỗ trợ
+## Invariant (v3)
 
-### Supported ops
-| Op | Params |
-|---|---|
-| `insert_paragraph_after` | `anchor`, `style`, `text`, `run_props`, `para_props`, `bookmark` |
-| `insert_paragraph_before` | `anchor`, `style`, `text`, `run_props`, `para_props` |
-| `remove` | `path` |
-| `update_text` | `path`, `text`, `run_props` |
-| `insert_table` | `anchor`, `rows`, `col_widths`, `style` |
-| `set_page_layout` | `margins`, `paper_size`, `orientation` |
-| `insert_image` | `anchor`, `image_path`, `width_cm`, `caption`, `caption_style` |
+1. First insert op always has explicit paraId-based anchor (never PREVIOUS)
+2. All subsequent insert ops use PREVIOUS
+3. Remove ops target only body_placeholders (never front_matter)
+4. Remove ops never target the first insert anchor
+5. Remove ops use `path` (never `at`)
+6. Every insert op has `source_block_id` and `source_text_sha256`
+7. Text is COPIED VERBATIM (never paraphrased, never truncated)
+8. Schema version is always "2"
+9. Final gate is CODE, not prompt
 
 ## Contract scripts
 
 ### `docx_inspect.py`
-Raw dump ONLY. Không có field pre-classified (không heading_level, không is_body_text). LLM tự suy luận.
+Raw dump ONLY. No heuristics, no pre-classification. LLM receives raw data for style_map decisions.
+
+### `source_packet.py`
+Mechanical markdown block splitter. Types are PURELY syntax-driven (heading, paragraph, caption_candidate, list_item, empty_line). Zero semantics.
+
+### `source_packet_to_ops.py` (NEW — critical)
+**Deterministic compiler.** Takes AST + style_map + replace_range → produces execution_ops.json.
+- Strips `#` from headings
+- Copies text VERBATIM
+- Assigns anchor/PREVIOUS mechanically
+- Adds source_block_id + hash for traceability
+- Appends remove ops after all insert ops
+
+### `validate_ops_strict.py` (NEW — blocking)
+**Hard-block validator.** Exit code 1 on high severity errors.
+Checks invariants: first anchor explicit, no duplicate blocks, no front_matter removes, no unsupported ops, no `at` in remove ops.
 
 ### `docx_validate_ops.py`
-Warn-only. Validate anchor (against all_para_ids), style, op params. Không block execution.
+Warn-only validator. Still runs for planning_report.json and detailed diagnostics.
+Used alongside strict validator but does NOT block apply.
 
 ### `execute_execution_ops.py`
-Mechanical executor. Đọc execution_ops.json, apply từng op qua OfficeCLI. Raise error nếu op không hợp lệ.
+Mechanical executor. Reads execution_ops.json, applies ops via OfficeCLI.
 
-### `docx_read_result.py`
-Đọc output DOCX thành outline/text/field/toc summary để LLM tự verify.
+### `verify_docx_output.py` (NEW)
+Readback + coverage verification. Checks every source_block text appears in output.
+Replaces the manual QA step for content coverage.
 
-## Quy tắc
-- Mỗi script ghi artifact ngắn, schema ổn định.
-- Mỗi script chạy lại được mà không hỏng run state.
-- `execution_ops.json` là source of truth.
-- Scripts heuristic cũ đã archive trong `scripts/legacy/`.
+### `final_gate.py` (NEW — CODE-LEVEL)
+Checks ALL required artifacts exist and pass quality thresholds.
+Returns `passed: true` only if every check succeeds.
+Replaces the prompt-based final gate in orchestrator.md.
 
 ## Skeleton Pipeline Config
 
-Khi template > 500 paragraphs, pipeline TỰ ĐỘNG bật skeleton mode.
-LLM KHÔNG cần biết điều này — artifact structure giữ nguyên.
+When template > 500 paragraphs, pipeline automatically enables skeleton mode.
+LLM does NOT need to know this — artifact structure is identical.
 
-### Cách hoạt động
-- `docx_inspect.py` nhận thêm `--skeleton-cache-dir` argument
-- Nếu cache miss → `skeleton_builder.py` build skeleton (~10-20KB)
-- Skeleton giữ: front matter, styles, header/footer, page layout, section properties
-- Skeleton loại: body content placeholders (paragraphs/tables sau front matter)
-- Hash-based cache: SHA-256 template file → tự động invalidation khi template thay đổi
-- `--force-skeleton` flag để force rebuild
+## Fallback Protocol: all_para_ids empty
 
-### Artifact mới
-| File | Mô tả |
-|---|---|
-| `template_skeleton.docx` | Skeleton DOCX (~10-20KB) dùng cho inspection |
-| `.office-auto/cache/skeletons/{hash}.meta.json` | Cache metadata |
-| `.office-auto/cache/skeletons/{hash}.skeleton.docx` | Cached skeleton |
-
-## Fallback Protocol: all_para_ids rỗng
-
-**Trigger**: `recommended_insert_anchor` = null VÀ `all_para_ids` = []
-
-**Mandatory behavior** (theo thứ tự):
-1. Check `paragraph_sample` — dùng `IDX_{body_start_index:05d}` làm anchor đầu tiên
-2. Sau op đầu tiên → `"anchor": "PREVIOUS"` cho mọi op tiếp theo  
-3. **KHÔNG** speculate về cơ chế PREVIOUS khi chưa có anchor đầu tiên
-4. **KHÔNG** gọi runPipeline khi chưa viết execution_ops.json
-5. Nếu không resolve được anchor nào → abort với explicit error message
-
-### IDX_ Synthetic paraIds
-- Khi paragraph không có `w14:paraId`, script inject `IDX_XXXXX` format
-- Validator KHÔNG warn HIGH severity cho synthetic IDs
-- Executor resolve `IDX_XXXXX` → real paraId qua `body._element` iteration
-- Nếu không resolve được → fallback PREVIOUS
+1. Check `paragraph_sample` — use `IDX_{body_start_index:05d}` as first anchor
+2. After first op → `"anchor": "PREVIOUS"` for all subsequent ops
+3. If no anchor is resolvable → abort with explicit error
