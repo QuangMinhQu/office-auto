@@ -149,9 +149,9 @@ markdown_headings = [
 ]
 ```
 
-## Phase 2b — Generate source_packet.json (NEW)
+## Phase 2b — Generate source_packet.json (MANDATORY — không bỏ qua)
 
-Thay vì đọc toàn bộ source rồi truyền raw text, dùng `source_packet.py` để splits source thành blocks:
+**TẤT CẢ flow hiện tại phải dùng source_packet.py.** Không còn truyền `source_content` thô dạng raw text cho Planner.
 
 ```bash
 python3 .opencode/skills/md-to-docx-pipeline/scripts/source_packet.py \
@@ -172,7 +172,14 @@ Output: `{run_dir}/source_packet.json`
 - Nếu `block_count > 30`, bật `use_chunked_planning = true`
 - Nếu `use_chunked_planning = true`, dùng `source_packet.py --chunk-index N` để lấy chunk
 - Khi chunking, giữ continuity bằng cách truyền anchor cuối của chunk trước làm mốc cho chunk sau
-- Planner nhận `source_blocks` (từ `source_packet.json`) thay vì `source_content` thô
+- Planner CHỈ nhận `source_blocks` (từ `source_packet.json`). KHÔNG truyền `source_content` thô nữa.
+
+### Source Content Rule (HARD)
+
+```
+source_content = NEVER. Luôn dùng source_blocks từ source_packet.json.
+Nếu source_packet.json chưa tồn tại → chạy source_packet.py trước khi spawn Planner.
+```
 
 ---
 
@@ -180,7 +187,8 @@ Output: `{run_dir}/source_packet.json`
 
 ## Pre-Phase 3 Checklist (bắt buộc verify trước khi spawn planner)
 - [ ] scaffold_summary đã được populate từ Inspector output?
-- [ ] source_content đã được đọc bằng Read tool?
+- [ ] source_packet.json đã tồn tại trong run_dir?
+- [ ] source_blocks đã được đọc từ source_packet.json?
 - [ ] estimated_ops đã được ước lượng?
 - [ ] use_chunked_planning đã được quyết định?
 
@@ -194,7 +202,6 @@ Task(
     run_dir: run_dir,
     scaffold_summary: scaffold_summary,
     markdown_headings: markdown_headings,
-    source_content: source_content_or_chunk,
     source_blocks: source_blocks_or_chunk,
     retry_hint: null,
     chunk_id: chunk_id_or_null,
@@ -203,7 +210,7 @@ Task(
 )
 ```
 
-> **NEW**: Ưu tiên truyền `source_blocks` (từ `source_packet.json`) thay vì `source_content` thô.
+> **MANDATORY**: CHỈ truyền `source_blocks` (từ `source_packet.json`). KHÔNG truyền `source_content` raw text.
 > `source_blocks` = array of `{id, type, text, line_start, line_end}` — types are MECHANICAL only.
 
 Planner sẽ tự gọi `write_file(path="{run_dir}/execution_ops.json", ...)` — viết trực tiếp ra disk.
@@ -240,6 +247,22 @@ Nếu validation fail:
 - Retry đúng 1 lần với `retry_hint` rõ ràng
 - Nếu vẫn fail sau retry, dừng workflow và báo user thay vì tiếp tục loop
 - KHÔNG tự fallback viết ops — luôn để Planner viết lại
+- KHÔNG tự "Building JSON structure..." trong thinking của orchestrator — đó là việc của Planner
+
+## Phase 3 Timeout Guard (HARD)
+
+Nếu sau khi spawn Planner, sau 120 giây mà `{run_dir}/execution_ops.json` CHƯA tồn tại:
+  → planner đang bị runaway reasoning
+  → Ghi `task_current.md`: `phase=planning_timeout, reason="execution_ops.json not created within 120s"`
+  → Dừng workflow, KHÔNG retry Planner tự động
+  → Báo user: "Planner timeout — source may be too large for single-pass planning. Retry with chunked planning."
+
+### Timeout check command:
+```bash
+test -f {run_dir}/execution_ops.json && echo "EXISTS" || echo "TIMEOUT"
+```
+
+Nếu TIMEOUT → không tiếp tục loop "Building JSON structure", fail ngay.
 
 ---
 

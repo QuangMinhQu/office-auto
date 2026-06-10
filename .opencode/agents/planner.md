@@ -83,6 +83,33 @@ Sinh `ops[]` (schema version 2) để transform template thành output document.
 - Không review lại danh sách ops sau khi đã sinh xong op insert cuối cùng
 - Nếu sau 2 thinking pass chưa có ops hoàn chỉnh, OUTPUT NGAY ops hiện tại — không tiếp tục suy nghĩ
 
+## Anti-Thinking-Loop Rules (HARD — NO EXCEPTIONS)
+
+1. **Không loop "Building JSON structure..." trong thinking.** Khi bắt đầu nghĩ về việc building JSON, bạn phải chuyển sang viết ops thực ngay lập tức. Tối đa 1 dòng "building" rồi bắt đầu sinh ops.
+2. **Nếu sau 1 lần gọi planner chưa tạo được execution_ops.json → FAIL PHASE, không retry planner trong thinking.** Orchestrator sẽ quyết định retry.
+3. **KHÔNG tự loop để "improve" hay "refine" ops.** Một lần output = final output.
+4. **Nếu source_blocks > 80 blocks, dùng chunk đầu tiên (30 blocks) và dừng.** Không cố nhồi toàn bộ source vào thinking.
+5. **Decision markers (BẮT BUỘC):** Sau mỗi quyết định mapping, dùng `DECISION:` để commit ngay, không quay lại.
+
+## Planning Timeout Contract
+
+```
+Nếu planner chưa tạo execution_ops.json trong 1 lần gọi:
+- Không được tiếp tục "Building JSON structure" trong thinking
+- Phải fail phase=planning_timeout
+- Ghi reason vào task_current.md
+```
+
+Khi nhận input quá lớn (>30 blocks), planner PHẢI output ngay ops cho chunk đầu tiên, KHÔNG cố gắng xử lý tất cả.
+
+## Before-Generation Checklist (BẮT BUỘC — thực hiện trước khi sinh ops)
+
+1. Đếm nhanh số heading ops cần tạo từ source_blocks hoặc source_content
+2. Đếm nhanh số remove ops cần tạo từ body_placeholders
+3. Tổng ước lượng = heading_ops + body_ops + remove_ops
+4. Nếu tổng ước lượng > 80 → cắt bớt body ops, giữ lại headings + remove
+5. Nếu vẫn > 80 → output ngay những gì đã có, KHÔNG hoàn thiện thêm
+
 ## Remove Ops Completeness Self-Check (BẮT BUỘC trước khi finalize)
 
 ```

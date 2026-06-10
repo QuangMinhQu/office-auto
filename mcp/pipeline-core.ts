@@ -228,9 +228,10 @@ export async function spawnPython(
   options?: { timeout?: number; cwd?: string },
 ): Promise<SpawnResult> {
   const python = await findPython()
-  const scriptPath = `${options?.cwd || "/"}/.opencode/skills/md-to-docx-pipeline/scripts/${script}`
+  const worktree = options?.cwd || process.cwd()
+  const scriptPath = `${worktree}/.opencode/skills/md-to-docx-pipeline/scripts/${script}`
   const command = [python, scriptPath, ...args]
-  const cwd = options?.cwd || process.cwd()
+  const cwd = worktree
   let stdout = ""
   let stderr = ""
   let exitCode = 0
@@ -313,4 +314,39 @@ export function jsonToolResult(output: Record<string, unknown>) {
     content: [{ type: "text" as const, text: JSON.stringify(output, null, 2) }],
     structuredContent: output,
   }
+}
+
+// === Timeout Guard ===
+
+/**
+ * Poll for a file to exist within a timeout window.
+ * Returns the file path if it appears, or null on timeout.
+ * Used to detect runaway planner reasoning.
+ */
+export async function waitForFile(
+  path: string,
+  timeoutMs: number = 120_000,
+  pollIntervalMs: number = 2000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await fileExists(path)) {
+      return true
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs))
+  }
+  return false
+}
+
+/**
+ * Wait for execution_ops.json to appear after spawning Planner.
+ * If timeout expires without the file, this is a planning_timeout failure.
+ */
+export async function waitForExecutionOps(
+  runDir: string,
+  timeoutMs: number = 120_000,
+): Promise<{ found: boolean; path: string }> {
+  const opsPath = `${runDir.replace(/\/+$/, "")}/execution_ops.json`
+  const found = await waitForFile(opsPath, timeoutMs)
+  return { found, path: opsPath }
 }
