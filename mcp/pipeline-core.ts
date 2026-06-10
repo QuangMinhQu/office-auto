@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn } from "node:child_process"
-import { access as nodeAccess, readFile as nodeReadFile, writeFile as nodeWriteFile } from "node:fs/promises"
+import { access as nodeAccess, mkdir as nodeMkdir, readFile as nodeReadFile, writeFile as nodeWriteFile } from "node:fs/promises"
 
 type BunLike = {
   spawn: (
@@ -209,5 +209,108 @@ export async function writeJsonFile(path: string, payload: unknown): Promise<voi
     await BunRuntime.write(path, text)
     return
   }
+  await nodeMkdir(path.split("/").slice(0, -1).join("/") || "/", { recursive: true })
   await nodeWriteFile(path, text, "utf8")
+}
+
+// === New utilities ===
+
+export type SpawnResult = {
+  exit_code: number
+  stdout: string
+  stderr: string
+  stdout_json?: any
+}
+
+export async function spawnPython(
+  script: string,
+  args: string[],
+  options?: { timeout?: number; cwd?: string },
+): Promise<SpawnResult> {
+  const python = await findPython()
+  const scriptPath = `${options?.cwd || "/"}/.opencode/skills/md-to-docx-pipeline/scripts/${script}`
+  const command = [python, scriptPath, ...args]
+  const cwd = options?.cwd || process.cwd()
+  let stdout = ""
+  let stderr = ""
+  let exitCode = 0
+
+  if (BunRuntime) {
+    const proc = BunRuntime.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" })
+    const exitedPromise = proc.exited
+    if (options?.timeout) {
+      const timer = new Promise<number>((_, reject) =>
+        setTimeout(() => reject(new Error(`spawnPython timeout after ${options.timeout}ms`)), options.timeout),
+      )
+      exitCode = await Promise.race([exitedPromise, timer])
+    } else {
+      exitCode = await exitedPromise
+    }
+    ;[stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ])
+  } else {
+    const proc = nodeSpawn(command[0], command.slice(1), { cwd })
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+    proc.stdout?.on("data", (chunk) => stdoutChunks.push(Buffer.from(chunk)))
+    proc.stderr?.on("data", (chunk) => stderrChunks.push(Buffer.from(chunk)))
+    exitCode = await new Promise<number>((resolve, reject) => {
+      proc.on("error", reject)
+      proc.on("close", (code) => resolve(code ?? 0))
+    })
+    stdout = Buffer.concat(stdoutChunks).toString("utf8")
+    stderr = Buffer.concat(stderrChunks).toString("utf8")
+  }
+
+  const result: SpawnResult = {
+    exit_code: exitCode,
+    stdout: stdout.trim(),
+    stderr: stderr.trim(),
+  }
+  try {
+    result.stdout_json = JSON.parse(result.stdout)
+  } catch {
+    // stdout is not JSON, that's fine
+  }
+  return result
+}
+
+export async function mergeJsonFile(path: string, data: Record<string, unknown>): Promise<void> {
+  const existing = await readJsonFile(path)
+  const merged = { ...(existing || {}), ...data }
+  await writeJsonFile(path, merged)
+}
+
+export function safeResolvePath(candidates: (string | null | undefined)[]): string | null {
+  for (const c of candidates) {
+    if (c && c.trim() && c.trim() !== "null" && c.trim() !== "None") {
+      return c.trim()
+    }
+  }
+  return null
+}
+
+export async function createRunDir(worktree: string, templateFile: string): Promise<string> {
+  const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 15)
+  const templateName = templateFile
+    .split("/").pop()!
+    .replace(/\.docx$/, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 40)
+  const runDir = `${worktree.replace(/\/+$/, "")}/.office-auto/state/${ts}_${templateName}`
+  if (BunRuntime) {
+    await BunRuntime.write(`${runDir}/.gitkeep`, "")
+  } else {
+    await nodeMkdir(runDir, { recursive: true })
+  }
+  return runDir
+}
+
+export function jsonToolResult(output: Record<string, unknown>) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(output, null, 2) }],
+    structuredContent: output,
+  }
 }

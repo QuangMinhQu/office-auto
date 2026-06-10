@@ -9,7 +9,7 @@ license: MIT
 ## Trình tự chạy
 Scripts là tay, LLM là não.
 
-Các primitive này duoc expose qua ca `.opencode/tools/docx_pipeline.ts` lan `mcp/office-auto-server.ts` (server `office-auto`).
+Các primitive này duoc expose qua MCP server `office-auto` (`mcp/office-auto-server.ts`). Moi phase la mot MCP tool rieng biet.
 
 1. `docx_inspect.py` — raw dump, zero heuristics
 2. **[LLM REASONING]** — đọc inspection output + markdown headings, viết `execution_ops.json`

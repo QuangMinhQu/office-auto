@@ -1,101 +1,25 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { z } from "zod"
-import {
-  fileExists,
-  parseMarkdownHeadings,
-  readJsonFile,
-  readTextFile,
-  resolveRunDir,
-  resolveWorkspacePath,
-  writeJsonFile,
-} from "./pipeline-core"
+import { registerScaffoldTool } from "./tools/scaffold"
+import { registerInspectTool } from "./tools/inspect"
+import { registerValidateTool } from "./tools/validate"
+import { registerExecuteTool } from "./tools/execute"
+import { registerQATool } from "./tools/qa"
+import { registerReviewTool } from "./tools/review"
+import { registerRefreshTool } from "./tools/refresh"
+import { registerOrchestratorTool } from "./tools/orchestrator"
 
 const WORKTREE = process.env.OFFICE_AUTO_WORKSPACE ?? process.cwd()
 const server = new McpServer({ name: "office-auto", version: "1.0.0" })
 
-function jsonToolResult(output: Record<string, unknown>) {
-  return {
-    content: [{ type: "text" as const, text: JSON.stringify(output, null, 2) }],
-    structuredContent: output,
-  }
-}
-
-server.registerTool(
-  "prepareInsertPlan",
-  {
-    title: "DOCX Insert Plan Scaffold",
-    description:
-      "Aggregate inspection output and source markdown headings into a compact reasoning scaffold for execution planning.",
-    inputSchema: z.object({
-      run_dir: z.string(),
-      content_file: z.string().default(""),
-    }),
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  },
-  async ({ run_dir, content_file }) => {
-    const absRunDir = resolveRunDir(WORKTREE, run_dir)
-    const contentFile = content_file ? resolveWorkspacePath(WORKTREE, content_file) : ""
-    const inspection = await readJsonFile(`${absRunDir}/docx_inspect_output.json`)
-    const stylesForLlm = await readJsonFile(`${absRunDir}/docx_inspect_styles_for_llm.json`)
-    const contentMap = await readJsonFile(`${absRunDir}/docx_inspect_content_map.json`)
-    let headings: Array<{ level: number; text: string }> = []
-    if (contentFile) {
-      try {
-        const markdownText = await readTextFile(contentFile)
-        headings = parseMarkdownHeadings(markdownText)
-      } catch {
-        headings = []
-      }
-    }
-
-    const rawAnchor = contentMap?.recommended_insert_anchor
-      || stylesForLlm?.recommended_anchor
-      || inspection?.content_map?.recommended_insert_anchor
-      || null;
-    const bodyPlaceholders = contentMap?.body_placeholders || inspection?.content_map?.body_placeholders || {};
-    const bodyParaIds: string[] = Array.isArray(bodyPlaceholders.para_ids) ? bodyPlaceholders.para_ids : [];
-    const frontMatterBlock = contentMap?.front_matter || inspection?.content_map?.front_matter || {};
-
-    const scaffold = {
-      run_dir: absRunDir,
-      source_file: contentFile || null,
-      recommended_anchor: rawAnchor
-        ? `/body/p[@paraId=${rawAnchor}]`
-        : null,
-      CRITICAL_FIRST_OP_ANCHOR: rawAnchor
-        ? `/body/p[@paraId=${rawAnchor}]`
-        : null,
-      anchor_format_note: "CRITICAL: anchor MUST be /body/p[@paraId=XXXX] format. Never use raw hex.",
-      toc_last_para_id: inspection?.front_matter_boundary?.last_para_id || null,
-      front_matter_last_para_id: inspection?.front_matter_boundary?.last_para_id || null,
-      body_text_style: stylesForLlm?.body_text_style || inspection?.styles_for_llm?.body_text_style || null,
-      heading_map: stylesForLlm?.heading_map || inspection?.styles_for_llm?.heading_map || {},
-      available_styles: (stylesForLlm?.available_styles || inspection?.styles_for_llm?.available_styles || [])
-        .slice(0, 15)
-        .map((s: any) => ({ name: s.name, style_id: s.style_id, use_for: s.use_for })),
-      do_not_use_styles: stylesForLlm?.do_not_use_styles || inspection?.styles_for_llm?.do_not_use_styles || [],
-      front_matter: frontMatterBlock,
-      body_placeholders: {
-        para_ids: bodyParaIds.slice(0, 50),
-        description: bodyPlaceholders.description || "",
-        total_count: bodyParaIds.length,
-      },
-      placeholder_note: "Only first 50 body placeholders shown. Full list in docx_inspect_content_map.json",
-      markdown_headings: headings,
-      markdown_heading_count: headings.length,
-      paragraph_count: Array.isArray(inspection?.paragraph_sample) ? inspection.paragraph_sample.length : 0,
-    }
-
-    const scaffoldFile = `${absRunDir}/insert_plan_scaffold.json`
-    await writeJsonFile(scaffoldFile, scaffold)
-    return jsonToolResult({
-      ok: true,
-      scaffold_file: scaffoldFile,
-      scaffold,
-    })
-  },
-)
+registerScaffoldTool(server, WORKTREE)
+registerInspectTool(server, WORKTREE)
+registerValidateTool(server, WORKTREE)
+registerExecuteTool(server, WORKTREE)
+registerQATool(server, WORKTREE)
+registerReviewTool(server, WORKTREE)
+registerRefreshTool(server, WORKTREE)
+registerOrchestratorTool(server, WORKTREE)
 
 process.on("uncaughtException", (error) => {
   console.error(error)
