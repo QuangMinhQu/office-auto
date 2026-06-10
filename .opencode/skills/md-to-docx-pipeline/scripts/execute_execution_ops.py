@@ -626,11 +626,12 @@ def execute_ops_batch(
 
             if op_name == "insert_paragraph_after":
                 # Check if this can be batched (simple paragraph, same anchor)
+                anchor_val = str(op.get("anchor") or "").upper()
                 is_simple = (
                     "style" in op
                     and "text" in op
                     and not op.get("run_props")
-                    and (op.get("anchor") is None or op.get("anchor") == current_anchor)
+                    and (op.get("anchor") is None or anchor_val == "PREVIOUS" or op.get("anchor") == current_anchor)
                 )
                 if is_simple:
                     batchable_buffer.append(op)
@@ -863,7 +864,13 @@ def main() -> None:
     target_path = Path(target_path_str)
 
     # If template is provided and target is different, copy template to target
-    template_file = args.template_file or ops_dict.get("template_file", "")
+    # Fallback chain: --template-file arg → execution_ops.json → run.json
+    run_state = read_json(run_dir / "run.json") if (run_dir / "run.json").exists() else {}
+    template_file = (
+        args.template_file
+        or ops_dict.get("template_file", "")
+        or run_state.get("template_file", "")
+    )
     if template_file and str(template_file) != str(target_path):
         import shutil
         tpl = Path(template_file)
@@ -900,16 +907,31 @@ def main() -> None:
     # Get prototype roles for style fallback
     prototype_roles = ops_dict.get("prototype_roles") or {}
 
-    # Execute
+    # Execute with crash report safety
     start = time.perf_counter()
     print(f"[execute_execution_ops] Executing {len(ops_list)} operations...")
 
-    report = execute_ops_batch(
-        ops_list,
-        target_path,
-        range_info=range_info,
-        fail_fast=args.fail_fast,
-    )
+    try:
+        report = execute_ops_batch(
+            ops_list,
+            target_path,
+            range_info=range_info,
+            fail_fast=args.fail_fast,
+        )
+    except Exception as exc:
+        duration = round(time.perf_counter() - start, 2)
+        crash_report = {
+            "status": "crashed",
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+            "target_file": str(target_path),
+            "template_file": str(template_file) if template_file else "",
+            "duration_seconds": duration,
+            "total_ops": len(ops_list),
+        }
+        write_json(run_dir / "execute_ops_report.json", crash_report)
+        print(f"[execute_execution_ops] CRASHED after {duration}s: {exc}")
+        raise
 
     duration = round(time.perf_counter() - start, 2)
 

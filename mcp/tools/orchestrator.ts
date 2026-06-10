@@ -213,10 +213,26 @@ export function registerOrchestratorTool(server: McpServer, worktree: string) {
 
         const applyResult = await spawnPython("execute_execution_ops.py", [
           "--run-dir", absRunDir,
+          "--template-file", absTpl,
           "--target-file", absTarget,
-        ])
+        ], { timeout: 600_000 })
 
-        const opsReport = await readJsonFile(`${absRunDir}/execute_ops_report.json`).catch(() => ({}))
+        const opsReport = await readJsonFile(`${absRunDir}/execute_ops_report.json`).catch(() => null)
+
+        if (!opsReport) {
+          await mergeJsonFile(`${absRunDir}/run.json`, { phase: "apply_crashed" })
+          return jsonToolResult({
+            ok: false,
+            phase: "apply",
+            error: "Executor crashed or timed out before writing execute_ops_report.json",
+            stdout: applyResult.stdout,
+            stderr: applyResult.stderr,
+            exit_code: applyResult.exit_code,
+            checkpoints,
+            run_dir: absRunDir,
+          })
+        }
+
         const buildStatus = opsReport?.failed === 0 ? "completed" : "partial"
 
         await mergeJsonFile(`${absRunDir}/run.json`, {

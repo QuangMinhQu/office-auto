@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
-"""build_report.py — LLM-as-Reasoning-Engine pipeline (issue.md architecture).
+"""build_report.py — deterministic pipeline (issue.md architecture).
 
-5-step pipeline:
+Pipeline:
   1. docx_inspect.py          → raw dump (zero heuristics)
       ↓ docx_inspect_output.json
-  2. [LLM REASONING]          ← LLM reads raw dump, writes execution_ops.json
-      ↓ execution_ops.json
-  3. docx_validate_ops.py     → warn-only validator
-      ↓ execution_ops_validation.json
-  4. execute_execution_ops.py → mechanical executor (OfficeCLI)
+  2. source_packet.py         → deterministic markdown parser
+      ↓ source_packet.json
+  3. source_packet_to_ops.py  → deterministic compiler (zero LLM)
+      ↓ execution_ops.json, style_map.json, replace_range.json
+  4. validate_ops_strict.py   → strict validation (hard block on high severity)
+      ↓ strict_validation.json
+  5. execute_execution_ops.py → mechanical executor (OfficeCLI)
       ↓ report.docx
-  5. docx_read_result.py      → read back result for verification
+  6. docx_read_result.py      → read back result for verification
       ↓ result_readback.json
-  6. qa_docx.py / review_docx.py → metrics & summary
+  7. qa_docx.py / review_docx.py → metrics & summary
 
-Old heuristic scripts (profile_template, plan_mapping, etc.) are archived
-in scripts/legacy/ — they are NOT called by this pipeline.
+Legacy LLM-as-reasoning flow is preserved in --phase legacy_inspect / legacy_execute.
 
 Usage:
-    python build_report.py --phase inspect    # Step 1: raw dump, wait for LLM
-    python build_report.py --phase execute    # Steps 2-5: LLM ops + execute + read
-    python build_report.py --phase qa         # Step 6: QA metrics
-    python build_report.py --phase all        # Full pipeline (all phases)
+    python build_report.py --phase inspect        # Step 1: raw dump
+    python build_report.py --phase compile        # Steps 2-4: source_packet → compile → validate
+    python build_report.py --phase execute        # Step 5: apply ops
+    python build_report.py --phase qa             # Steps 6-7: QA metrics
+    python build_report.py --phase all            # Full deterministic pipeline (all phases)
 """
 from __future__ import annotations
 
@@ -109,10 +111,14 @@ def main() -> None:
     parser.add_argument("--target-file", default=str(TARGET))
     parser.add_argument(
         "--phase",
-        choices=["inspect", "execute", "qa", "all"],
+        choices=["inspect", "compile", "execute", "validate", "qa", "all",
+                 "legacy_inspect", "legacy_execute"],
         default="inspect",
-        help="Pipeline phase to run. 'inspect' runs docx_inspect and waits for LLM. "
-             "'execute' applies execution_ops.json. 'qa' runs QA checks. 'all' runs inspect→execute→qa.",
+        help="Pipeline phase to run. 'inspect' runs docx_inspect. "
+             "'compile' runs source_packet → source_packet_to_ops → validate_ops_strict. "
+             "'execute' applies execution_ops.json. 'qa' runs QA checks. "
+             "'all' runs full deterministic pipeline. "
+             "'legacy_inspect'/'legacy_execute' use old LLM-writes-ops flow.",
     )
     parser.add_argument("--top-n-styles", type=int, default=None, help="Only dump top N styles (filtering, not classification)")
     parser.add_argument(
@@ -163,9 +169,8 @@ def main() -> None:
         return False
 
     # === PHASE: INSPECT ===
-    # This is the ONLY tool script before LLM reasoning.
-    # After this, LLM reads docx_inspect_output.json and writes execution_ops.json.
-    if args.phase in ("inspect", "all"):
+    # Raw dump of template structure — no reasoning, no heuristics
+    if args.phase in ("inspect", "all", "legacy_inspect", "legacy_execute"):
         inspect_args = ["--template-file", args.template_file, "--run-dir", str(run_dir)]
         if args.top_n_styles:
             inspect_args.extend(["--top-n-styles", str(args.top_n_styles)])
@@ -186,27 +191,84 @@ def main() -> None:
                 summary = json.loads(inspect_summary_path.read_text(encoding="utf-8"))
                 for layer, fpath in summary.get("layer_files", {}).items():
                     print(f"  - {layer}: {fpath}")
-            print("\n[build_report] TIẾP THEO: LLM (session này) đọc raw dump →")
-            print("[build_report] tự suy luận style inheritance, classify headings,")
-            print("[build_report] map markdown → styles, và viết execution_ops.json")
-            print("=" * 70)
-            
-            # Save the fact that inspect completed, waiting for LLM
-            write_json(run_dir / "pipeline_state.json", {
-                "phase": "inspect_completed_waiting_for_llm",
-                "template_file": args.template_file,
-                "source_file": args.source_file,
-                "target_file": args.target_file,
-            })
 
-    # === PHASE: VALIDATE ===
-    # Warn-only validator — checks execution_ops.json against template inspection
-    # Does NOT block execution, only reports warnings for LLM review
-    if args.phase in ("execute", "validate", "all"):
+            if args.phase == "legacy_inspect":
+                print("\n[build_report] TIẾP THEO: LLM (session này) đọc raw dump →")
+                print("[build_report] tự suy luận style inheritance, classify headings,")
+                print("[build_report] map markdown → styles, và viết execution_ops.json")
+                print("=" * 70)
+                write_json(run_dir / "pipeline_state.json", {
+                    "phase": "inspect_completed_waiting_for_llm",
+                    "template_file": args.template_file,
+                    "source_file": args.source_file,
+                    "target_file": args.target_file,
+                })
+            else:
+                print("\n[build_report] Tiếp theo: compile (source_packet → source_packet_to_ops → validate)")
+                print("=" * 70)
+
+    # === PHASE: COMPILE (deterministic, zero LLM) ===
+    # source_packet.py → source_packet_to_ops.py → validate_ops_strict.py
+    if args.phase in ("compile", "all"):
+        if failed_step:
+            print(f"\n[build_report] ⏭️  Skipping compile: previous step failed")
+        else:
+            # Step 2: source_packet.py — deterministic markdown parser
+            success = run_and_record(
+                "source_packet.py",
+                ["--source", args.source_file, "--run-dir", str(run_dir)]
+            )
+            if success:
+                print("\n[build_report] ✅ source_packet.py hoàn tất.")
+            else:
+                failed_step = "source_packet.py"
+
+        if not failed_step:
+            # Step 3: source_packet_to_ops.py — deterministic compiler
+            compile_args = ["--run-dir", str(run_dir)]
+            success = run_and_record("source_packet_to_ops.py", compile_args)
+            if success:
+                print("\n[build_report] ✅ source_packet_to_ops.py hoàn tất.")
+                ops_file = run_dir / "execution_ops.json"
+                if ops_file.exists():
+                    ops_data = json.loads(ops_file.read_text(encoding="utf-8"))
+                    ops_list = ops_data.get("ops", ops_data) if isinstance(ops_data, dict) else ops_data
+                    insert_count = sum(1 for op in ops_list if op.get("op") != "remove")
+                    remove_count = sum(1 for op in ops_list if op.get("op") == "remove")
+                    print(f"[build_report]   {insert_count} insert ops, {remove_count} remove ops")
+            else:
+                failed_step = "source_packet_to_ops.py"
+
+        if not failed_step:
+            # Step 4: validate_ops_strict.py — hard block on high severity
+            success = run_and_record(
+                "validate_ops_strict.py",
+                ["--run-dir", str(run_dir), "--ops-file", str(run_dir / "execution_ops.json")]
+            )
+            if success:
+                strict_report_path = run_dir / "strict_validation.json"
+                if strict_report_path.exists():
+                    strict_data = json.loads(strict_report_path.read_text(encoding="utf-8"))
+                    valid = strict_data.get("valid", False)
+                    high_count = strict_data.get("high_severity_count", 0)
+                    warn_count = strict_data.get("warning_count", 0)
+                    print(f"\n[build_report] ✅ validate_ops_strict.py hoàn tất. Valid: {valid}, High: {high_count}, Warnings: {warn_count}")
+                    if not valid:
+                        print("[build_report] ❌ Strict validation FAILED — blocking errors found")
+                        blocking = strict_data.get("blocking_errors", [])
+                        for idx, err in enumerate(blocking[:10], 1):
+                            print(f"[build_report]   {idx}. {err}")
+                        failed_step = "validate_ops_strict.py"
+                        exit_code = 1
+            else:
+                failed_step = "validate_ops_strict.py"
+
+    # === LEGACY PHASE: VALIDATE (warn-only, for LLM flow) ===
+    if args.phase in ("legacy_execute", "validate"):
         ops_file = run_dir / "execution_ops.json"
         if not ops_file.exists():
             print(f"\n[build_report] ❌ execution_ops.json không tồn tại tại {run_dir}")
-            print("[build_report] Chạy 'python build_report.py --phase inspect' trước,")
+            print("[build_report] Chạy 'python build_report.py --phase legacy_inspect' trước,")
             print("[build_report] rồi để LLM viết execution_ops.json.")
             failed_step = "docx_validate_ops.py"
             exit_code = 1
@@ -237,7 +299,7 @@ def main() -> None:
                             print(f"[build_report]   ... and {len(high_warnings) - 10} more")
                         print("[build_report]")
                         print("[build_report] TIẾP THEO: LLM fix execution_ops.json and run again:")
-                        print(f"[build_report]   python build_report.py --phase execute --run-dir {run_dir}")
+                        print(f"[build_report]   python build_report.py --phase legacy_execute --run-dir {run_dir}")
                         print("=" * 70)
                         failed_step = "docx_validate_ops.py"
                         exit_code = 1
@@ -248,30 +310,24 @@ def main() -> None:
                 print(f"\n[build_report] ⚠️  docx_validate_ops.py execution có lỗi (continue to execute)")
 
     # === PHASE: EXECUTE ===
-    # Apply execution_ops.json mechanically (LLM already decided what to do)
-    if args.phase in ("execute", "all"):
+    # Apply execution_ops.json mechanically (deterministic compiler already generated ops)
+    if args.phase in ("execute", "all", "legacy_execute"):
         # Check if validation failed (high-severity warnings blocking)
         if failed_step:
-            print(f"\n[build_report] ⏭️  Skipping execute: validation failed, fix execution_ops.json first")
+            print(f"\n[build_report] ⏭️  Skipping execute: previous step failed")
         else:
-            # Check if execution_ops.json exists (LLM must have written it)
+            # Check if execution_ops.json exists
             ops_file = run_dir / "execution_ops.json"
             if not ops_file.exists():
                 print(f"\n[build_report] ❌ execution_ops.json không tồn tại tại {run_dir}")
-                print("[build_report] Chạy 'python build_report.py --phase inspect' trước,")
-                print("[build_report] rồi để LLM viết execution_ops.json.")
+                if args.phase == "legacy_execute":
+                    print("[build_report] Chạy 'python build_report.py --phase legacy_inspect' trước,")
+                    print("[build_report] rồi để LLM viết execution_ops.json.")
+                else:
+                    print("[build_report] Chạy 'python build_report.py --phase compile' trước.")
                 failed_step = "execute_execution_ops.py"
                 exit_code = 1
             else:
-                # Copy template to target if needed
-                tpl = Path(args.template_file)
-                tgt = Path(args.target_file)
-                if tpl.exists() and str(tpl) != str(tgt):
-                    tgt.parent.mkdir(parents=True, exist_ok=True)
-                    import shutil
-                    shutil.copy2(str(tpl), str(tgt))
-                    print(f"\n[build_report] Copied {tpl} → {tgt}")
-
                 success = run_and_record(
                     "execute_execution_ops.py",
                     ["--run-dir", str(run_dir), "--template-file", args.template_file, "--target-file", args.target_file, "--fail-fast"]
@@ -283,7 +339,7 @@ def main() -> None:
 
     # === PHASE: READ RESULT ===
     # Read back the result DOCX to verify execution
-    if args.phase in ("execute", "read_result", "all"):
+    if args.phase in ("execute", "read_result", "all", "legacy_execute"):
         if not failed_step and (run_dir / "execute_ops_report.json").exists():
             exec_report = json.loads((run_dir / "execute_ops_report.json").read_text(encoding="utf-8"))
             if exec_report.get("status") == "completed":
@@ -295,7 +351,7 @@ def main() -> None:
 
     # === PHASE: QA ===
     # Metrics collection only (no intelligence — just measurement)
-    if args.phase in ("qa", "all"):
+    if args.phase in ("qa", "all", "legacy_execute"):
         if not failed_step:
             # Check if target was built
             if (run_dir / "execute_ops_report.json").exists():

@@ -258,6 +258,9 @@ def main() -> None:
         if isinstance(loaded_style_map, dict):
             style_map.update(loaded_style_map)
 
+    # Materialize style_map so final_gate can find it
+    write_json(run_dir / "style_map.json", style_map)
+
     # Load or default replace_range
     replace_range: dict = {}
     replace_range_path = Path(args.replace_range) if args.replace_range else run_dir / "replace_range.json"
@@ -273,6 +276,9 @@ def main() -> None:
             replace_range = default_replace_range(first_anchor, placeholder_ids)
         else:
             replace_range = default_replace_range("", [])
+
+    # Materialize replace_range so final_gate can find it
+    write_json(run_dir / "replace_range.json", replace_range)
 
     # Compile
     execution_ops = compile_source_packet_to_ops(source_packet, style_map, replace_range)

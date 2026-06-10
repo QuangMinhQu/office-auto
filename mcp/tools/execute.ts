@@ -42,7 +42,11 @@ export function registerExecuteTool(server: McpServer, worktree: string) {
         status: "executing",
       })
 
-      const args = ["--run-dir", absRunDir, "--target-file", resolvedTarget]
+      const args = ["--run-dir", absRunDir]
+      if (runJson?.template_file) {
+        args.push("--template-file", runJson.template_file)
+      }
+      args.push("--target-file", resolvedTarget)
       if (fail_fast) args.push("--fail-fast")
 
       const result = await spawnPython("execute_execution_ops.py", args)
