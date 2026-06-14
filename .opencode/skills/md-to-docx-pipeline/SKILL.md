@@ -1,59 +1,108 @@
 ---
 name: md-to-docx-pipeline
-description: Deterministic DOCX compiler pipeline — LLM decides mapping, scripts compile.
+description: Deterministic DOCX compiler pipeline — durable workflow + event-sourced state + subagent contracts.
 license: MIT
 ---
 
-# SKILL: MD_TO_DOCX_PIPELINE
+# SKILL: MD_TO_DOCX_PIPELINE (v3.1 — Durable Workflow)
 
-## Triết lý (updated v3)
+## Triết lý (v3.1)
 
-> **LLM là não cho quyết định mơ hồ; Scripts là tay cho thao tác chính xác; Final gate là code, không phải lời nhắc trong prompt.**
+> **LLM là não cho quyết định mơ hồ; Scripts là tay cho thao tác chính xác; Final gate là code, không phải lời nhắc trong prompt. Events.jsonl là nguồn sự thật duy nhất. run.json chỉ là snapshot derived từ events.**
 
 Trong bài toán "lấy markdown đã chia level → đổ vào template DOCX, giữ phần mặc định ít thay đổi":
 - LLM **không** copy nội dung.
 - LLM **không** sinh hàng trăm ops.
 - LLM chỉ quyết định: vùng thay thế, mapping style, exception handling, review.
 - Phần còn lại là compiler/script deterministic.
+- State không bao giờ bị mất — events.jsonl lưu toàn bộ lịch sử, có thể replay.
+- Có thể resume từ bất kỳ điểm nào sau crash.
 
-## Trình tự chạy (v3 — deterministic compiler)
+## Cách dùng (v3.1)
+
+### Default path — Agent phải gọi `createReportFromMarkdown`
 
 ```
-1. docx_inspect.py        → dump raw template (NO LLM)
-2. source_packet.py       → mechanical markdown AST (NO LLM)
-3. [LLM/Mapper]           → decide style_map.json + replace_range.json (ONLY ambiguous decisions)
-4. source_packet_to_ops.py → deterministic compile AST → execution_ops.json (NO LLM)
-5. validate_ops_strict.py → hard-block validation (CODE, not prompt)
-6. execute_execution_ops.py → mechanical executor (NO LLM)
-7. verify_docx_output.py  → readback + coverage verification (NO LLM)
-8. qa_docx.py             → QA metrics (NO LLM)
-9. review_docx.py         → semantic review (LLM optional)
-10. docx_refresh_fields.py → TOC/field refresh (NO LLM)
-11. final_gate.py          → CODE-LEVEL final gate (NO LLM, NO prompt)
+agent → call createReportFromMarkdown (MCP tool)
+  → PipelineSupervisor điều phối graph
+  → từng subagent chạy, emit event, tạo artifact
+  → final gate code-level quyết định pass/fail
 ```
 
-## Artifacts (v3)
-| File | Mô tả | Sinh bởi |
-|---|---|---|
-| `docx_inspect_output.json` | Full template inspection | `docx_inspect.py` |
-| `docx_inspect_styles_for_llm.json` | Compact style summary | `docx_inspect.py` |
-| `docx_inspect_content_map.json` | Front-matter/body anchor map | `docx_inspect.py` |
-| `insert_plan_scaffold.json` | Aggregated scaffold | MCP tool `scaffold` |
-| `source_packet.json` | Mechanical markdown AST (typed blocks + SHA-256) | `source_packet.py` |
-| `style_map.json` | LLM quyết định: markdown level → DOCX style_id | MapperAgent (hoặc mặc định) |
-| `replace_range.json` | LLM quyết định: insert anchor + remove paths | MapperAgent (hoặc mặc định) |
-| `execution_ops.json` | Deterministic compiled ops | `source_packet_to_ops.py` |
-| `strict_validation.json` | Hard-block validation report | `validate_ops_strict.py` |
-| `execution_ops_validation.json` | Warn-only validation + planning report | `docx_validate_ops.py` |
-| `planning_report.json` | Coverage report (heading/body/remove counts) | `docx_validate_ops.py` |
-| `execute_ops_report.json` | Execution summary | `execute_execution_ops.py` |
-| `result_readback.json` | Output DOCX readback | `docx_read_result.py` |
-| `coverage_report.json` | Source block coverage verification | `verify_docx_output.py` |
-| `qa_report.json` | QA metrics | `qa_docx.py` |
-| `review_report.json` | Semantic review | `review_docx.py` |
-| `post_process_report.json` | TOC/field refresh report | `docx_refresh_fields.py` |
-| `final_gate.json` | CODE-LEVEL final gate verdict | `final_gate.py` |
-| `run.json` | Atomic state machine | MCP tools |
+### KHÔNG BAO GIỜ gọi trực tiếp các tool thấp cấp
+
+Các tool như `inspectTemplate`, `generateOpsFromSourcePacket`, `applyOps`, `runQA`,... chỉ là internal activities. Gọi trực tiếp sẽ bỏ qua transition guard, event log, và state consistency.
+
+### Resume after crash
+
+```
+agent → call resumeReportRun (MCP tool)
+  → replay events.jsonl để xác định phase hiện tại
+  → verify artifact checksums
+  → continue từ phase tiếp theo
+```
+
+### Inspect run state
+
+```
+agent → call inspectRun (MCP tool)
+  → trả về phase, status, artifacts, checks, errors
+```
+
+## Trình tự chạy (v3.1 — durable workflow graph)
+
+```
+CREATE_RUN
+  → INSPECT_TEMPLATE (TemplateInspectorAgent — code-only)
+  → PARSE_SOURCE (SourceParserAgent — code-only)
+  → MAP_INSERTION (MapperAgent — LLM decision)
+  → COMPILE_OPS (CompilerAgent — code-only)
+  → VALIDATE_OPS (ValidatorAgent — code-only)
+  → APPLY_DOCX (ExecutorAgent — code-only)
+  → VERIFY_OUTPUT (VerifierAgent — code-only)
+  → QA (QAAgent — code-only)
+  → REVIEW (ReviewerAgent — LLM optional)
+  → REFRESH_FIELDS (PostProcessorAgent — code-only)
+  → FINAL_GATE (FinalGateAgent — code-only)
+  → COMPLETE / FAILED
+```
+
+### State management
+
+- **events.jsonl** = append-only event log, source of truth
+- **run.json** = derived snapshot, rebuilt from events by reducer
+- **artifacts.json** = artifact manifest with SHA256 checksums
+- **lock** = run-level mutex, chống concurrent execution
+- Mỗi phase transition có guard (transitions.ts)
+- Mỗi artifact có checksum + producer + phase
+- Retry idempotent (cùng idempotency_key + checksum match → skip)
+
+## Artifacts (v3.1 — with manifest + checksum)
+
+| File | Mô tả | Sinh bởi | Phase |
+|---|---|---|---|
+| `docx_inspect_output.json` | Full template inspection | `docx_inspect.py` | inspected |
+| `docx_inspect_styles_for_llm.json` | Compact style summary | `docx_inspect.py` | inspected |
+| `docx_inspect_content_map.json` | Front-matter/body anchor map | `docx_inspect.py` | inspected |
+| `insert_plan_scaffold.json` | Aggregated scaffold | MapperAgent | mapped |
+| `source_packet.json` | Mechanical markdown AST (typed blocks + SHA-256) | `source_packet.py` | source_parsed |
+| `style_map.json` | LLM quyết định: markdown level → DOCX style_id | MapperAgent | mapped |
+| `replace_range.json` | LLM quyết định: insert anchor + remove paths | MapperAgent | mapped |
+| `execution_ops.json` | Deterministic compiled ops | `source_packet_to_ops.py` | compiled |
+| `strict_validation.json` | Hard-block validation report | `validate_ops_strict.py` | validated |
+| `execution_ops_validation.json` | Warn-only validation + planning report | `docx_validate_ops.py` | validated |
+| `planning_report.json` | Coverage report (heading/body/remove counts) | `docx_validate_ops.py` | validated |
+| `execute_ops_report.json` | Execution summary | `execute_execution_ops.py` | applied |
+| `result_readback.json` | Output DOCX readback | `docx_read_result.py` | verified |
+| `coverage_report.json` | Source block coverage verification | `verify_docx_output.py` | verified |
+| `qa_report.json` | QA metrics | `qa_docx.py` | qa_passed |
+| `review_report.json` | Semantic review | `review_docx.py` | reviewed |
+| `post_process_report.json` | TOC/field refresh report | `docx_refresh_fields.py` | refreshed |
+| `final_gate.json` | CODE-LEVEL final gate verdict | `final_gate.py` | final_gate |
+| `events.jsonl` | Append-only event log (source of truth) | PipelineSupervisor + agents | all |
+| `artifacts.json` | Artifact manifest with SHA256 checksums | State layer | all |
+| `run.json` | Derived snapshot (cache, rebuilt from events) | Reducer | all |
+| `lock` | Run-level mutex file | Lock manager | all |
 
 ## LLM Reasoning Chain (v3 — simplified)
 
@@ -89,17 +138,78 @@ Trong bài toán "lấy markdown đã chia level → đổ vào template DOCX, g
 - ❌ Planner với `steps: 8` và hard limits 80 ops
 - ❌ Chunking content vì sợ context không xử lý nổi
 
-## Invariant (v3)
+## Invariant (v3.1 — durable workflow)
 
-1. First insert op always has explicit paraId-based anchor (never PREVIOUS)
-2. All subsequent insert ops use PREVIOUS
-3. Remove ops target only body_placeholders (never front_matter)
-4. Remove ops never target the first insert anchor
-5. Remove ops use `path` (never `at`)
-6. Every insert op has `source_block_id` and `source_text_sha256`
-7. Text is COPIED VERBATIM (never paraphrased, never truncated)
-8. Schema version is always "2"
-9. Final gate is CODE, not prompt
+### State invariants
+1. **events.jsonl is source of truth** — run.json is derived snapshot, never directly mutated
+2. **Every state transition has a guard** — assertTransitionAllowed() blocks invalid transitions
+3. **Every artifact has a manifest entry with SHA256** — no dangling files
+4. **Event first, snapshot second** — append event → reduce → write run.json
+5. **Subagents only emit events, never mutate state directly**
+6. **Lock prevents concurrent execution** — acquireRunLock before any mutation
+7. **Retry is idempotent** — same idempotency_key + matching checksum → skip re-execution
+
+### Compilation invariants
+8. First insert op always has explicit paraId-based anchor (never PREVIOUS)
+9. All subsequent insert ops use PREVIOUS
+10. Remove ops target only body_placeholders (never front_matter)
+11. Remove ops never target the first insert anchor
+12. Remove ops use `path` (never `at`)
+13. Every insert op has `source_block_id` and `source_text_sha256`
+14. Text is COPIED VERBATIM (never paraphrased, never truncated)
+15. Schema version is always "2"
+16. Final gate is CODE, not prompt
+
+### Agent invariants
+17. Subagent must not modify run.json directly
+18. Subagent must not decide the next phase (supervisor routes)
+19. Subagent only creates artifacts in its own namespace
+20. Subagent must emit events for all side effects
+21. Subagent must be idempotent given same idempotency_key
+
+## Public API (v3.1)
+
+### `createReportFromMarkdown` — default path, always use this
+```json
+{
+  "template_file": "...",
+  "source_file": "...",
+  "target_file": "...",
+  "strict": true,
+  "require_review": false,
+  "log_level": "brief"
+}
+```
+
+### `resumeReportRun` — resume after crash
+```json
+{
+  "run_dir": ".office-auto/state/20260610_..."
+}
+```
+
+### `inspectRun` — read current state (read-only)
+```json
+{
+  "run_dir": ".office-auto/state/20260610_..."
+}
+```
+
+### `retryFailedPhase` — retry a failed phase
+```json
+{
+  "run_dir": ".office-auto/state/20260610_...",
+  "phase": "applying"
+}
+```
+
+### `abortRun` — mark as failed + release lock
+```json
+{
+  "run_dir": ".office-auto/state/20260610_...",
+  "reason": "User cancelled"
+}
+```
 
 ## Contract scripts
 

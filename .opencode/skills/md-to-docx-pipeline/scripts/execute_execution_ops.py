@@ -637,14 +637,14 @@ def execute_ops_batch(
                     batchable_buffer.append(op)
                     batchable_count += 1
                     if len(batchable_buffer) >= ADD_BATCH_SIZE:
-                        current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                        current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report, fail_fast)
                         batchable_buffer.clear()
                         batchable_count = 0
                     continue
 
                 # Flush buffer first
                 if batchable_buffer:
-                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report, fail_fast)
                     batchable_buffer.clear()
                     batchable_count = 0
 
@@ -663,12 +663,10 @@ def execute_ops_batch(
                         officecli_save(session)
                         raise
 
-            elif op_name == "insert_paragraph_before":
+           elif op_name == "insert_paragraph_before":
                 # Flush buffer first
                 if batchable_buffer:
-                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
-                    batchable_buffer.clear()
-                    batchable_count = 0
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report, fail_fast)
 
                 anchor = resolve_anchor(op, current_anchor, range_info)
                 try:
@@ -687,9 +685,7 @@ def execute_ops_batch(
             elif op_name in ("insert_table_after", "insert_table"):
                 # Flush buffer
                 if batchable_buffer:
-                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
-                    batchable_buffer.clear()
-                    batchable_count = 0
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report, fail_fast)
 
                 anchor = resolve_anchor(op, current_anchor, range_info)
                 try:
@@ -705,12 +701,10 @@ def execute_ops_batch(
                         officecli_save(session)
                         raise
 
-            elif op_name == "insert_image":
+           elif op_name == "insert_image":
                 # Flush buffer
                 if batchable_buffer:
-                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
-                    batchable_buffer.clear()
-                    batchable_count = 0
+                    current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report, fail_fast)
 
                 anchor = resolve_anchor(op, current_anchor, range_info)
                 try:
@@ -751,7 +745,7 @@ def execute_ops_batch(
 
         # Flush remaining batchable
         if batchable_buffer:
-            current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report)
+            current_anchor = _flush_batch_add(session, batchable_buffer, current_anchor, report, fail_fast)
 
         # Save the document
         officecli_save(session)
@@ -764,6 +758,7 @@ def _flush_batch_add(
     buffer: list[dict],
     current_anchor: str,
     report: dict,
+    fail_fast: bool = False,
 ) -> str:
     """Batch-add simple paragraphs mechanically.
 
@@ -809,7 +804,7 @@ def _flush_batch_add(
         report["failed"] += len(buffer)
         report["errors"].append({"batch": "add", "count": len(buffer), "anchor": anchor, "error": str(exc)})
         if fail_fast:
-            officecli_save(target_path)
+            officecli_save(document_path)
             raise
     return anchor
 
